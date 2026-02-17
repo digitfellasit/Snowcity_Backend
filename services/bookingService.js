@@ -806,9 +806,9 @@ async function initiatePhonePePayment({ bookingId, email, mobile, amount: fronte
     throw e;
   }
 
-  let redirectUrl, merchantTransactionId, raw;
+  let redirectUrl, merchantTransactionId, raw, result;
   try {
-    const result = await phonepeService.initiate({
+    result = await phonepeService.initiate({
       merchantTxnNo,
       amount,
       customerEmailID: email,
@@ -826,7 +826,7 @@ async function initiatePhonePePayment({ bookingId, email, mobile, amount: fronte
   }
 
   if (merchantTransactionId) {
-    const phonePeOrderId = result.phonePeOrderId || merchantTransactionId;
+    const phonePeOrderId = result?.raw?.phonePeOrderId || merchantTransactionId;
     await pool.query(
       `UPDATE orders SET payment_ref = $1, payment_txn_no = $2, payment_mode = 'PhonePe' WHERE order_id = $3`,
       [phonePeOrderId, merchantTransactionId, orderId]
