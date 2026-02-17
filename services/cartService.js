@@ -9,6 +9,7 @@ const offersModel = require('../models/offers.model');
 const bookingsModel = require('../models/bookings.model');
 const bookingService = require('./bookingService');
 const payphiService = require('./payphiService');
+const phonepeService = require('./phonepeService');
 const payphi = require('../config/payphi');
 
 const round2 = (x) => Number((Math.round((Number(x) || 0) * 100) / 100).toFixed(2));
@@ -356,8 +357,8 @@ async function initiatePayPhi({ user_id = null, session_id = null, email, mobile
     throw err;
   }
 
-  // Per kit: merchantTxnNo stays fixed (same value used for STATUS/REFUND)
-  const merchantTxnNo = cart.cart_ref;
+  // Generate unique merchantTxnNo for each payment attempt to avoid duplicates
+  const merchantTxnNo = `ORD${cart.cart_ref}_${Date.now()}`;
 
   const { redirectUrl, tranCtx, raw } = await payphiService.initiate({
     merchantTxnNo,
@@ -379,8 +380,54 @@ async function initiatePayPhi({ user_id = null, session_id = null, email, mobile
 
   return { redirectUrl, tranCtx, response: raw };
 }
-  // Build a unique merchantTxnNo per attempt to avoid PayPhi duplicates
-  
+
+async function initiatePhonePe({ user_id = null, session_id = null, email, mobile }) {
+  const cart = await cartModel.getOpenCart({ user_id, session_id });
+  if (!cart) {
+    const err = new Error('Open cart not found');
+    err.status = 404;
+    throw err;
+  }
+  const items = await cartModel.listItems(cart.cart_id);
+  if (!items.length) {
+    const err = new Error('Cart is empty');
+    err.status = 400;
+    throw err;
+  }
+  const amount = Number(cart.final_amount || 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    const err = new Error('Cart total must be greater than zero');
+    err.status = 400;
+    throw err;
+  }
+  if (!email || !mobile) {
+    const err = new Error('Email and mobile are required');
+    err.status = 400;
+    throw err;
+  }
+
+  // Build unique merchantTxnNo for PhonePe
+  const merchantTxnNo = `PP_${cart.cart_ref}_${Date.now()}`;
+
+  const { redirectUrl, merchantTransactionId, raw } = await phonepeService.initiate({
+    merchantTxnNo,
+    amount,
+    customerEmailID: String(email).trim(),
+    customerMobileNo: String(mobile).trim(),
+    merchantUserId: `USER_${user_id || Date.now()}`
+  });
+
+  if (merchantTransactionId) {
+    await cartModel.setPayment(cart.cart_id, {
+      payment_status: 'Pending',
+      payment_ref: merchantTransactionId,
+      payment_txn_no: merchantTxnNo,
+      payment_mode: 'PhonePe'
+    });
+  }
+
+  return { redirectUrl, merchantTransactionId, response: raw };
+}
 
 // Helper to load existing bookings created from a cart (idempotency)
 async function getBookingsForCart(cart_id) {
@@ -496,5 +543,6 @@ module.exports = {
   updateItem,
   removeItem,
   initiatePayPhi,
+  initiatePhonePe,
   createBookingsFromCart,
 };

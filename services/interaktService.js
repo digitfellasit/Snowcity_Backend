@@ -12,7 +12,7 @@ const FIXED_APP_URL = APP_URL ? APP_URL.split(',')[0].trim() : null;
 function formatTime12h(t) {
   if (!t) return '';
   const timeStr = String(t).trim();
-  
+
   // Handle various time formats
   let onlyTime = timeStr;
   if (timeStr.includes('T')) {
@@ -20,21 +20,21 @@ function formatTime12h(t) {
   } else if (timeStr.includes(' ')) {
     onlyTime = timeStr.split(' ')[0];
   }
-  
+
   // Remove any trailing timezone info
   onlyTime = onlyTime.split('.')[0];
-  
+
   const parts = onlyTime.split(':');
   if (parts.length < 2) return '';
-  
+
   const h = Number(parts[0]);
   const m = Number(parts[1]);
-  
+
   if (Number.isNaN(h) || Number.isNaN(m)) return '';
-  
+
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 || 12;
-  
+
   return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
@@ -57,7 +57,7 @@ function formatDateIN(d) {
 function formatSlotRange(row) {
   const start = formatTime12h(row?.slot_start_time || row?.start_time || row?.booking_time);
   const end = formatTime12h(row?.slot_end_time || row?.end_time);
-  
+
   if (start && end) {
     return `${start} - ${end}`;
   }
@@ -113,38 +113,38 @@ async function buildTicketTemplateDataForOrder(orderId) {
 
   // Group attractions by date for better formatting
   const attractionsByDate = new Map();
-  
+
   effectiveItems.forEach((it) => {
     const title = it.item_title || it.attraction_title || it.combo_title || (it.item_type === 'Combo' ? 'Combo' : 'Attraction');
     const qty = Number(it.quantity || 1);
     const dateStr = formatDateIN(it.booking_date) || '';
     const slotStr = formatSlotRange(it);
-    
+
     const dateKey = dateStr || 'Date TBD';
-    
+
     if (!attractionsByDate.has(dateKey)) {
       attractionsByDate.set(dateKey, []);
     }
-    
+
     attractionsByDate.get(dateKey).push({
       title,
       qty,
       time: slotStr
     });
   });
-  
+
   // Build formatted attractions text
   const attractionLines = [];
-  
+
   attractionsByDate.forEach((attractions, date) => {
     const attractionDetails = attractions.map(attr => {
       const timeStr = attr.time ? ` (${attr.time})` : '';
       return `${attr.title} (Qty: ${attr.qty})${timeStr}`;
     }).join(', ');
-    
+
     attractionLines.push(`${date}: ${attractionDetails}`);
   });
-  
+
   const itemsText = attractionLines.length ? attractionLines.join(' | ') : 'Booking details unavailable';
 
   const addonMap = new Map();

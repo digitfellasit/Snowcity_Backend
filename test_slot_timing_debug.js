@@ -11,7 +11,7 @@ async function testComboSlotsAPI() {
     console.log('✅ Combo Slots API Response:');
     console.log('   Status:', response.status);
     console.log('   Data Count:', response.data?.data?.length || 0);
-    
+
     if (response.data?.data?.length > 0) {
       const firstSlot = response.data.data[0];
       console.log('   First Slot Sample:');
@@ -23,7 +23,7 @@ async function testComboSlotsAPI() {
       console.log('     end_time:', firstSlot.end_time);
       console.log('     capacity:', firstSlot.capacity);
       console.log('     price:', firstSlot.price);
-      
+
       // Test timing format
       const formatTime12Hour = (time24) => {
         if (!time24) return '';
@@ -33,11 +33,11 @@ async function testComboSlotsAPI() {
         const hour12 = hour % 12 || 12;
         return `${hour12}:${minutes} ${ampm}`;
       };
-      
+
       const start = formatTime12Hour(firstSlot.start_time);
       const end = formatTime12Hour(firstSlot.end_time);
       const timeText = start && end ? `${start} → ${end}` : '';
-      
+
       console.log('   🕐 Formatted Timing:', timeText);
     } else {
       console.log('   ❌ No slots returned');
@@ -59,7 +59,7 @@ async function testAttractionSlotsAPI() {
     console.log('✅ Attraction Slots API Response:');
     console.log('   Status:', response.status);
     console.log('   Data Count:', response.data?.data?.length || 0);
-    
+
     if (response.data?.data?.length > 0) {
       const firstSlot = response.data.data[0];
       console.log('   First Slot Sample:');
@@ -71,7 +71,7 @@ async function testAttractionSlotsAPI() {
       console.log('     end_time:', firstSlot.end_time);
       console.log('     capacity:', firstSlot.capacity);
       console.log('     price:', firstSlot.price);
-      
+
       // Test timing format
       const formatTime12Hour = (time24) => {
         if (!time24) return '';
@@ -81,11 +81,11 @@ async function testAttractionSlotsAPI() {
         const hour12 = hour % 12 || 12;
         return `${hour12}:${minutes} ${ampm}`;
       };
-      
+
       const start = formatTime12Hour(firstSlot.start_time);
       const end = formatTime12Hour(firstSlot.end_time);
       const timeText = start && end ? `${start} → ${end}` : '';
-      
+
       console.log('   🕐 Formatted Timing:', timeText);
     } else {
       console.log('   ❌ No slots returned');
@@ -107,7 +107,7 @@ async function testDirectSlotsAPI() {
     console.log('✅ Direct Slots API Response:');
     console.log('   Status:', response.status);
     console.log('   Data Count:', response.data?.data?.length || 0);
-    
+
     if (response.data?.data?.length > 0) {
       const firstSlot = response.data.data[0];
       console.log('   First Slot Sample:');
@@ -118,7 +118,7 @@ async function testDirectSlotsAPI() {
       console.log('     end_time:', firstSlot.end_time);
       console.log('     capacity:', firstSlot.capacity);
       console.log('     price:', firstSlot.price);
-      
+
       // Test timing format
       const formatTime12Hour = (time24) => {
         if (!time24) return '';
@@ -128,11 +128,11 @@ async function testDirectSlotsAPI() {
         const hour12 = hour % 12 || 12;
         return `${hour12}:${minutes} ${ampm}`;
       };
-      
+
       const start = formatTime12Hour(firstSlot.start_time);
       const end = formatTime12Hour(firstSlot.end_time);
       const timeText = start && end ? `${start} → ${end}` : '';
-      
+
       console.log('   🕐 Formatted Timing:', timeText);
     } else {
       console.log('   ❌ No slots returned');
@@ -150,11 +150,11 @@ async function runTests() {
   console.log('🚀 Starting API Tests...');
   console.log('📅 Testing Date: 2025-11-29');
   console.log('🕐 Expected Hours: 10:00 AM to 8:00 PM');
-  
+
   await testComboSlotsAPI();
   await testAttractionSlotsAPI();
   await testDirectSlotsAPI();
-  
+
   console.log('\n🎯 FRONTEND DEBUGGING TIPS:');
   console.log('\n1. Open browser dev tools (F12)');
   console.log('2. Go to Network tab');
@@ -166,7 +166,7 @@ async function runTests() {
   console.log('   - /api/slots?attraction_id=1&date=YYYY-MM-DD');
   console.log('6. Check response data for start_time and end_time fields');
   console.log('7. Check console for any JavaScript errors');
-  
+
   console.log('\n🔍 Expected Response Structure:');
   console.log('{');
   console.log('  data: [');
@@ -178,7 +178,7 @@ async function runTests() {
   console.log('    }');
   console.log('  ]');
   console.log('}');
-  
+
   console.log('\n✨ If timing is still not visible:');
   console.log('1. Check if API returns timing data');
   console.log('2. Check if frontend processes timing correctly');

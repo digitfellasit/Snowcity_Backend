@@ -1,5 +1,7 @@
 const { pool } = require('../config/db');
 const dynamicPricingModel = require('../models/dynamicPricing.model');
+const attractionDatePricesModel = require('../models/attractionDatePrices.model');
+const comboDatePricesModel = require('../models/comboDatePrices.model');
 
 /**
  * Check if a given date is a weekday, weekend, or holiday
@@ -139,12 +141,28 @@ async function getApplicableRules({ itemType, itemId, date, time, holidays = [] 
  * Calculate dynamic price based on applicable rules
  */
 async function calculateDynamicPrice({ itemType, itemId, basePrice, date, time, quantity = 1, holidays = [] }) {
+  const dateStr = date.toISOString().split('T')[0];
+
+  // Check for date-specific pricing first (overrides base price)
+  let effectiveBasePrice = basePrice;
+  if (itemType === 'attraction') {
+    const datePrice = await attractionDatePricesModel.getDatePrice(itemId, dateStr);
+    if (datePrice) {
+      effectiveBasePrice = parseFloat(datePrice.price);
+    }
+  } else if (itemType === 'combo') {
+    const datePrice = await comboDatePricesModel.getDatePrice(itemId, dateStr);
+    if (datePrice) {
+      effectiveBasePrice = parseFloat(datePrice.price);
+    }
+  }
+
   // First check if there are dynamic pricing rules for this date
-  const dynamicPricingRules = await dynamicPricingModel.getApplicableRules(itemType, itemId, date.toISOString().split('T')[0]);
+  const dynamicPricingRules = await dynamicPricingModel.getApplicableRules(itemType, itemId, dateStr);
   
   if (dynamicPricingRules.length > 0) {
-    // Apply dynamic pricing: calculate adjusted price from base price
-    let finalPrice = basePrice;
+    // Apply dynamic pricing: calculate adjusted price from effective base price
+    let finalPrice = effectiveBasePrice;
     const appliedRules = [];
     
     for (const rule of dynamicPricingRules) {
@@ -153,7 +171,7 @@ async function calculateDynamicPrice({ itemType, itemId, basePrice, date, time, 
       if (rule.price_adjustment_type === 'fixed') {
         adjustment = rule.price_adjustment_value;
       } else if (rule.price_adjustment_type === 'percentage') {
-        adjustment = (basePrice * rule.price_adjustment_value) / 100;
+        adjustment = (effectiveBasePrice * rule.price_adjustment_value) / 100;
       }
       
       finalPrice += adjustment;
@@ -172,7 +190,7 @@ async function calculateDynamicPrice({ itemType, itemId, basePrice, date, time, 
     finalPrice = Math.max(0, finalPrice);
     
     return {
-      originalPrice: basePrice,
+      originalPrice: effectiveBasePrice,
       finalPrice,
       discountAmount: 0, // No discount, just adjustment
       appliedRules,
@@ -185,15 +203,15 @@ async function calculateDynamicPrice({ itemType, itemId, basePrice, date, time, 
   
   if (!rules.length) {
     return {
-      originalPrice: basePrice,
-      finalPrice: basePrice,
+      originalPrice: effectiveBasePrice,
+      finalPrice: effectiveBasePrice,
       discountAmount: 0,
       appliedRules: [],
-      totalPrice: basePrice * quantity
+      totalPrice: effectiveBasePrice * quantity
     };
   }
   
-  let finalPrice = basePrice;
+  let finalPrice = effectiveBasePrice;
   let discountAmount = 0;
   const appliedRules = [];
   
@@ -239,7 +257,7 @@ async function calculateDynamicPrice({ itemType, itemId, basePrice, date, time, 
   }
 
   return {
-    originalPrice: basePrice,
+    originalPrice: effectiveBasePrice,
     finalPrice: Math.max(0, finalPrice),
     discountAmount,
     appliedRules,

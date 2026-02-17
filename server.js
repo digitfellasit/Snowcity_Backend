@@ -49,8 +49,6 @@ async function start() {
 }
 
 start();
-
-// Graceful shutdown
 const shutdown = async (signal) => {
   try {
     logger.warn(`${signal} received. Shutting down gracefully...`);

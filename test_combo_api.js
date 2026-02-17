@@ -52,7 +52,7 @@ function makeRequest(method, path, data = null) {
 // Test functions
 async function testCreateCombo() {
   console.log('🧪 Testing combo creation...');
-  
+
   const testCombo = {
     name: 'Test Adventure Combo',
     attraction_ids: [1, 2, 3], // Assuming attractions 1, 2, 3 exist
@@ -99,7 +99,7 @@ async function testCreateCombo() {
 
 async function testListCombos() {
   console.log('\n🧪 Testing combo listing...');
-  
+
   try {
     const response = await makeRequest('GET', '/combos');
     console.log('✅ Combo listing response:', response.status);
@@ -113,7 +113,7 @@ async function testListCombos() {
 
 async function testGetComboById(comboId) {
   console.log(`\n🧪 Testing get combo by ID: ${comboId}...`);
-  
+
   try {
     const response = await makeRequest('GET', `/combos/${comboId}`);
     console.log('✅ Get combo response:', response.status);
@@ -127,7 +127,7 @@ async function testGetComboById(comboId) {
 
 async function testUpdateCombo(comboId) {
   console.log(`\n🧪 Testing combo update for ID: ${comboId}...`);
-  
+
   const updateData = {
     name: 'Updated Test Adventure Combo',
     discount_percent: 15,
@@ -147,7 +147,7 @@ async function testUpdateCombo(comboId) {
 
 async function testLegacyCombo() {
   console.log('\n🧪 Testing legacy combo format...');
-  
+
   const legacyCombo = {
     attraction_1_id: 1,
     attraction_2_id: 2,
@@ -170,24 +170,24 @@ async function testLegacyCombo() {
 // Main test runner
 async function runTests() {
   console.log('🚀 Starting Combo API Tests...\n');
-  
+
   // Test 1: Create new combo with new format
   const newCombo = await testCreateCombo();
-  
+
   if (newCombo && newCombo.combo_id) {
     // Test 2: Get combo by ID
     await testGetComboById(newCombo.combo_id);
-    
+
     // Test 3: Update combo
     await testUpdateCombo(newCombo.combo_id);
   }
-  
+
   // Test 4: List all combos
   await testListCombos();
-  
+
   // Test 5: Test legacy format
   await testLegacyCombo();
-  
+
   console.log('\n✅ All tests completed!');
   console.log('\n📝 Notes:');
   console.log('- Make sure the backend server is running on localhost:4000');

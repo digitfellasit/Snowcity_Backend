@@ -15,4 +15,16 @@ router.post('/login', validate(loginValidator), ctrl.adminLogin);
 // Admin logout - requires authentication
 router.post('/logout', adminAuth, ctrl.adminLogout);
 
+// Admin password change - requires authentication
+router.post('/change-password', adminAuth, ctrl.adminChangePassword);
+
+// Admin forgot password - no authentication required
+router.post('/forgot-password', ctrl.adminForgotPassword);
+
+// Admin reset password - no authentication required
+router.post('/reset-password', ctrl.adminResetPassword);
+
+// Admin profile - requires authentication
+router.get('/profile', adminAuth, ctrl.adminProfile);
+
 module.exports = router;

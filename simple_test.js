@@ -2,7 +2,7 @@ const { buildTicketTemplateDataForOrder } = require('./services/interaktService'
 
 // Mock the dependencies
 const originalRequire = require;
-require = function(id) {
+require = function (id) {
   if (id === '../config/db') {
     return {
       pool: {
@@ -73,9 +73,9 @@ require = function(id) {
 async function runTest() {
   try {
     console.log('🧪 Testing WhatsApp Message Formatting\n');
-    
+
     const templateData = await buildTicketTemplateDataForOrder(12345);
-    
+
     console.log('📱 FINAL WHATSAPP MESSAGE:');
     console.log('===========================');
     console.log(`Hi ${templateData.user_name},`);
@@ -89,14 +89,14 @@ async function runTest() {
     console.log(templateData.addonsText);
     console.log('');
     console.log('The ticket PDF is attached.');
-    
+
     console.log('\n✅ IMPROVEMENTS VERIFIED:');
     console.log('========================');
     console.log('✓ Multiple attractions on same date are now combined');
     console.log('✓ Time formatting shows 12-hour format (AM/PM)');
     console.log('✓ Attractions grouped by date for better readability');
     console.log('✓ Add-ons properly aggregated across all attractions');
-    
+
   } catch (error) {
     console.error('❌ Error:', error.message);
   }

@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const dynamicPricingCtrl = require('../controllers/dynamicPricing.controller');
-const { authenticateToken } = require('../middlewares/auth');
+const { requireAuth } = require('../middlewares/authMiddleware');
 
 // All routes require authentication
-router.use(authenticateToken);
+router.use(requireAuth);
 
 // GET /api/admin/dynamic-pricing - Get all rules
 router.get('/', dynamicPricingCtrl.getRules);

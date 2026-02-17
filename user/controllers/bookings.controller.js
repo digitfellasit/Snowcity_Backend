@@ -23,7 +23,7 @@ function normalizeAddons(addons) {
 
 function normalizeCreateItem(input = {}, userId = null) {
   console.log('🔍 DEBUG normalizeCreateItem input:', input);
-  
+
   const item = input || {};
 
   // IDs (accept snake_case and camelCase)
@@ -41,7 +41,7 @@ function normalizeCreateItem(input = {}, userId = null) {
   const quantity = Math.max(1, toInt(item.quantity ?? item.qty, 1));
   const booking_date = item.booking_date || item.date || null;
   const payment_mode = item.payment_mode || 'Online';
-  
+
   // Coupon code might be per item in UI, but usually applied per cart.
   // We extract it here but the service might pick the first one.
   const coupon_code = (item.coupon_code ?? item.couponCode ?? item.coupon)?.trim() || null;
@@ -50,7 +50,7 @@ function normalizeCreateItem(input = {}, userId = null) {
   let slot_label = item.slot_label || item.slotLabel || null;
   let slot_start_time = item.slot_start_time || item.slotStartTime || item.slot?.start_time || null;
   let slot_end_time = item.slot_end_time || item.slotEndTime || item.slot?.end_time || null;
-  
+
   // If frontend didn't provide slot timing, extract from virtual slot ID
   if (!slot_start_time && !slot_end_time) {
     const slotId = item.slot_id || item.combo_slot_id;
@@ -58,14 +58,14 @@ function normalizeCreateItem(input = {}, userId = null) {
       const parts = slotId.split('-');
       const hourStr = parts[parts.length - 1];
       const hour = parseInt(hourStr);
-      
+
       if (!isNaN(hour)) {
         slot_start_time = `${String(hour).padStart(2, '0')}:00:00`;
-        
+
         // Attraction slots are 1 hour, combo slots are 2 hours
         const duration = item.combo_id ? 2 : 1;
         slot_end_time = `${String((hour + duration) % 24).padStart(2, '0')}:00:00`;
-        
+
         // Generate slot label
         const formatTime12Hour = (time24) => {
           const [hours, minutes] = time24.split(':');
@@ -74,9 +74,9 @@ function normalizeCreateItem(input = {}, userId = null) {
           const hour12 = hour % 12 || 12;
           return `${hour12}:${minutes} ${ampm}`;
         };
-        
+
         slot_label = `${formatTime12Hour(slot_start_time)} - ${formatTime12Hour(slot_end_time)}`;
-        
+
         console.log('🔍 DEBUG extracted timing from virtual slot ID:', {
           slotId,
           hour,
@@ -87,7 +87,7 @@ function normalizeCreateItem(input = {}, userId = null) {
       }
     }
   }
-  
+
   console.log('🔍 DEBUG backend slot timing:', {
     slot_label,
     slot_start_time,
@@ -125,9 +125,9 @@ function normalizeCreateItem(input = {}, userId = null) {
     slot_start_time,
     slot_end_time
   };
-  
+
   console.log('🔍 DEBUG normalizeCreateItem result:', result);
-  
+
   return result;
 }
 
@@ -147,7 +147,7 @@ exports.listMyBookings = async (req, res, next) => {
     // If you want to list Orders, you would need a bookingsModel.listOrders({ user_id... })
     // For now, keeping existing behavior but just ensuring it filters by user.
     const data = await bookingsModel.listBookings({ user_id: userId, limit, offset });
-    
+
     res.json({
       data,
       meta: { page, limit, count: data.length, hasNext: data.length === limit }
@@ -166,17 +166,17 @@ exports.getOrderDetails = async (req, res, next) => {
 
     // Try to get Order (Parent)
     const order = await bookingsModel.getOrderWithDetails(id);
-    
+
     // If order exists, verify ownership
     if (order) {
-        if (order.user_id !== userId) return res.status(404).json({ error: 'Order not found' });
-        return res.json(order);
+      if (order.user_id !== userId) return res.status(404).json({ error: 'Order not found' });
+      return res.json(order);
     }
 
     // Fallback: Try to get single Booking (Legacy support)
     const booking = await bookingsModel.getBookingById(id);
     if (!booking || booking.user_id !== userId) return res.status(404).json({ error: 'Not found' });
-    
+
     return res.json(booking);
   } catch (err) { next(err); }
 };
@@ -203,7 +203,7 @@ exports.createOrder = async (req, res, next) => {
 
     // Call Service
     const result = await bookingService.createBookings(items);
-    
+
     // Result structure: { order_id, order, bookings: [] }
     return res.status(201).json(result);
   } catch (err) { next(err); }
@@ -248,4 +248,65 @@ exports.checkPayPhiStatus = async (req, res, next) => {
     const out = await bookingService.checkPayPhiStatus(id);
     res.json(out);
   } catch (err) { next(err); }
+};
+
+// Initiate PhonePe Payment for an Order
+exports.initiatePhonePePayment = async (req, res, next) => {
+  try {
+    const userId = me(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const id = toInt(req.params.id, null); // This is the ORDER ID
+    if (!isPosInt(id)) {
+      console.warn(`[PhonePe] Invalid Order ID param: "${req.params.id}" (parsed: ${id})`);
+      return res.status(400).json({
+        error: 'Invalid Order ID',
+        details: `Expected a positive integer, received: "${req.params.id}"`
+      });
+    }
+
+    const { email, mobile, amount } = (req.body && typeof req.body === 'object') ? req.body : {};
+    if (!email || !mobile) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        details: 'Both email and mobile are required to initiate payment'
+      });
+    }
+
+    const out = await bookingService.initiatePhonePePayment({
+      bookingId: id, // Service param name is legacy, but we pass Order ID
+      email,
+      mobile,
+      amount
+    });
+    res.json(out);
+  } catch (err) {
+    console.error(`[PhonePe] initiatePayment error for order ${req.params.id}:`, err.message);
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+};
+
+// Check PhonePe Payment Status for an Order
+exports.checkPhonePeStatus = async (req, res, next) => {
+  try {
+    const userId = me(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const id = toInt(req.params.id, null); // ORDER ID
+    if (!isPosInt(id)) {
+      console.warn(`[PhonePe] Invalid Order ID param for status check: "${req.params.id}"`);
+      return res.status(400).json({
+        error: 'Invalid Order ID',
+        details: `Expected a positive integer, received: "${req.params.id}"`
+      });
+    }
+
+    const out = await bookingService.checkPhonePeStatus(id);
+    res.json(out);
+  } catch (err) {
+    console.error(`[PhonePe] checkStatus error for order ${req.params.id}:`, err.message);
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
 };

@@ -1,7 +1,7 @@
 const DEFAULT_ORIGINS = [
   'https://snowcity-backend-zjlj.onrender.com',
-  'http://localhost:5173',
-  'http://localhost:5173',
+  'https://snowpark.netlify.app',
+  'https://snowpark.netlify.app',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:5174',
   'https://snowcity-backend-zjlj.onrender.com',
@@ -16,7 +16,7 @@ const parseOrigins = () => {
   const envList = raw.split(',').map((o) => o.trim()).filter(Boolean);
   return Array.from(new Set([...
     DEFAULT_ORIGINS,
-    ...envList,
+  ...envList,
   ]));
 };
 

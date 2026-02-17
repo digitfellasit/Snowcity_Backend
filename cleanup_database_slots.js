@@ -72,4 +72,4 @@ async function cleanupDatabaseSlots() {
   }
 }
 
-cleanupDatabaseSlots();
+// cleanupDatabaseSlots(); // Commented out - no longer cleaning pending orders automatically

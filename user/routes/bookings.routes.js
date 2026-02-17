@@ -20,4 +20,8 @@ router.post('/', requireAuth, bookingsCtrl.createOrder);
 router.post('/:id/pay/payphi/initiate', requireAuth, paymentLimiter, bookingsCtrl.initiatePayPhiPayment);
 router.get('/:id/pay/payphi/status', requireAuth, bookingsCtrl.checkPayPhiStatus);
 
+// PhonePe helpers (Operates on Order ID now)
+router.post('/:id/pay/phonepe/initiate', requireAuth, paymentLimiter, bookingsCtrl.initiatePhonePePayment);
+router.get('/:id/pay/phonepe/status', requireAuth, bookingsCtrl.checkPhonePeStatus);
+
 module.exports = router;

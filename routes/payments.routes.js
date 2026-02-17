@@ -23,9 +23,11 @@ router.get('/health', async (req, res) => {
     let dbOk = false;
     try { await pool.query('SELECT 1'); dbOk = true; } catch {}
 
-    const configured = !!(process.env.PAYPHI_MERCHANT_ID && process.env.PAYPHI_SECRET_KEY);
-    let sampleHash = null;
-    if (configured) {
+    const payphiConfigured = !!(process.env.PAYPHI_MERCHANT_ID && process.env.PAYPHI_SECRET_KEY);
+    const phonepeConfigured = !!(process.env.PHONEPE_CLIENT_ID && process.env.PHONEPE_CLIENT_SECRET);
+
+    let payphiSampleHash = null;
+    if (payphiConfigured) {
       const payload = {
         addlParam1: 'Test1',
         addlParam2: 'Test2',
@@ -40,24 +42,33 @@ router.get('/health', async (req, res) => {
         transactionType: 'SALE',
         txnDate: payphi.formatTxnDate(),
       };
-      sampleHash = payphi.computeInitiateHash(payload);
+      payphiSampleHash = payphi.computeInitiateHash(payload);
     }
 
     const doDeep = isTrue(process.env.PAYMENTS_DEEP_CHECK);
-    const reachability = configured && doDeep
+    const payphiReachability = payphiConfigured && doDeep
       ? await shallowPing((process.env.PAYPHI_BASE_URL || '').replace(/\/+$/, ''))
       : null;
 
     res.json({
-      ok: dbOk && configured,
+      ok: dbOk && (payphiConfigured || phonepeConfigured),
       db: { ok: dbOk },
       payphi: {
-        configured,
+        configured: payphiConfigured,
         baseURL: process.env.PAYPHI_BASE_URL || null,
         merchantId: process.env.PAYPHI_MERCHANT_ID ? '***' + String(process.env.PAYPHI_MERCHANT_ID).slice(-4) : null,
         returnURL: process.env.PAYPHI_RETURN_URL || null,
-        sampleHash,
-        reachability,
+        sampleHash: payphiSampleHash,
+        reachability: payphiReachability,
+      },
+      phonepe: {
+        configured: phonepeConfigured,
+        environment: process.env.PHONEPE_ENVIRONMENT || 'sandbox',
+        baseURL: process.env.PHONEPE_ENVIRONMENT === 'production'
+          ? process.env.PHONEPE_BASE_URL_PRODUCTION
+          : process.env.PHONEPE_BASE_URL_SANDBOX,
+        clientId: process.env.PHONEPE_CLIENT_ID ? '***' + String(process.env.PHONEPE_CLIENT_ID).slice(-4) : null,
+        callbackURL: process.env.PHONEPE_CALLBACK_URL || null,
       },
       notes: doDeep ? 'Deep checks enabled' : 'Set PAYMENTS_DEEP_CHECK=true to ping base URL',
       timestamp: new Date().toISOString(),
@@ -85,5 +96,8 @@ router.post('/payphi/hash-preview', express.json(), (req, res) => {
     res.status(400).json({ error: e.message });
   }
 });
+
+// Include PhonePe routes
+router.use('/phonepe', require('./phonepe.routes'));
 
 module.exports = router;

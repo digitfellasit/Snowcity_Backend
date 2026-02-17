@@ -70,7 +70,7 @@ const mockBookingsModel = {
 
 // Override the require statements to use our mocks
 const originalRequire = require;
-require = function(id) {
+require = function (id) {
   if (id === '../config/db') {
     return { pool: mockPool };
   }
@@ -92,11 +92,11 @@ require = function(id) {
 
 async function testWhatsAppMessaging() {
   console.log('🧪 Testing WhatsApp Messaging System\n');
-  
+
   try {
     // Test the template data building
     const templateData = await buildTicketTemplateDataForOrder(12345);
-    
+
     console.log('✅ Template Data Built Successfully:');
     console.log('=====================================');
     console.log('Order ID:', templateData.order_id);
@@ -110,7 +110,7 @@ async function testWhatsAppMessaging() {
     console.log('\n🎯 Add-ons ({{3}}):');
     console.log('==================');
     console.log(templateData.addonsText);
-    
+
     // Test the message format
     console.log('\n📱 Final WhatsApp Message Format:');
     console.log('==================================');
@@ -125,29 +125,29 @@ async function testWhatsAppMessaging() {
     console.log(templateData.addonsText);
     console.log('');
     console.log('The ticket PDF is attached.');
-    
+
     console.log('\n✅ Test completed successfully!');
-    
+
     // Verify the improvements
     console.log('\n🔍 Verification:');
     console.log('===============');
-    
+
     // Check if attractions are grouped by date
     const hasDateGrouping = templateData.itemsText.includes('2025-12-25:') && templateData.itemsText.includes('2025-12-26:');
     console.log(`✓ Attractions grouped by date: ${hasDateGrouping ? 'YES' : 'NO'}`);
-    
+
     // Check if time formatting is correct
     const hasCorrectTimeFormat = templateData.itemsText.includes('10:00 AM') && templateData.itemsText.includes('2:30 PM');
     console.log(`✓ Time format (12-hour): ${hasCorrectTimeFormat ? 'YES' : 'NO'}`);
-    
+
     // Check if multiple attractions on same date are combined
     const hasCombinedAttractions = templateData.itemsText.includes('Snow City (Qty: 2) (10:00 AM - 12:00 PM), Mad Lab (Qty: 1) (2:30 PM - 4:00 PM)');
     console.log(`✓ Multiple attractions combined: ${hasCombinedAttractions ? 'YES' : 'NO'}`);
-    
+
     // Check if add-ons are properly aggregated
     const hasAggregatedAddons = templateData.addonsText.includes('Snow Gear (2x)') && templateData.addonsText.includes('Hot Chocolate (1x)');
     console.log(`✓ Add-ons aggregated: ${hasAggregatedAddons ? 'YES' : 'NO'}`);
-    
+
   } catch (error) {
     console.error('❌ Test failed:', error.message);
     console.error(error.stack);

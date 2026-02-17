@@ -103,6 +103,36 @@ exports.checkPayPhiStatus = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+exports.initiatePhonePe = async (req, res, next) => {
+  try {
+    const userId = me(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized. Please login/verify OTP.' });
+
+    const user = await usersModel.getUserById(userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const { email, mobile } = (req.body && typeof req.body === 'object') ? req.body : {};
+    const paymentEmail = email || user.email;
+    const paymentMobile = mobile || user.phone;
+    if (!paymentEmail || !paymentMobile) {
+      return res.status(400).json({ error: 'email and mobile are required for payment' });
+    }
+
+    const out = await cartService.initiatePhonePe({ user_id: userId, session_id: null, email: paymentEmail, mobile: paymentMobile });
+    res.json(out);
+  } catch (err) { next(err); }
+};
+
+exports.checkPhonePeStatus = async (req, res, next) => {
+  try {
+    const userId = me(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    // We simply re-check via return handler; status polling can be added later
+    res.json({ note: 'Use /api/webhooks/phonepe/return?merchantTransactionId=...' });
+  } catch (err) { next(err); }
+};
+
 exports.finalizeCheckout = async (req, res, next) => {
   try {
     const id = req.user?.id ?? req.user?.user_id;

@@ -5,7 +5,7 @@ const API_BASE = process.env.VITE_ADMIN_API_BASE_URL || 'https://snowcity-backen
 
 async function testAttractionSlotsAPI() {
   console.log('Testing attraction slots API endpoints...');
-  
+
   try {
     // Test list attraction slots
     console.log('\n=== Testing GET /api/admin/attraction-slots ===');
@@ -27,7 +27,7 @@ async function testAttractionSlotsAPI() {
       console.log('❌ GET attraction-slots FAILED');
       console.log('Error:', error.response?.data || error.message);
     }
-    
+
     // Test get specific slot
     console.log('\n=== Testing GET /api/admin/attraction-slots/:id ===');
     try {
@@ -42,11 +42,11 @@ async function testAttractionSlotsAPI() {
       console.log('❌ GET attraction-slot by ID FAILED');
       console.log('Error:', error.response?.data || error.message);
     }
-    
+
     console.log('\n=== API Test Summary ===');
     console.log('If you see SUCCESS messages above, the API is working!');
     console.log('If you see FAILED messages, check the backend server and logs.');
-    
+
   } catch (error) {
     console.error('Test failed:', error.message);
   }

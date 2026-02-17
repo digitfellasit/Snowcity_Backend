@@ -10,4 +10,7 @@ router.delete('/items/:id', optionalAuth, ctrl.removeItem);
 router.post('/pay/payphi/initiate', requireAuth, ctrl.initiatePayPhi);
 router.get('/pay/payphi/status', requireAuth, ctrl.checkPayPhiStatus);
 
+router.post('/pay/phonepe/initiate', requireAuth, ctrl.initiatePhonePe);
+router.get('/pay/phonepe/status', requireAuth, ctrl.checkPhonePeStatus);
+
 module.exports = router;

@@ -58,23 +58,35 @@ const absoluteFromPath = (path = '') => {
 module.exports = async (req, res) => {
   try {
     const tranCtx = pickTranCtx(req.query) || pickTranCtx(req.body);
-    const merchantTxnNoRaw =
+    const merchantTxnNo =
       pickValue(req.query, 'merchantTxnNo') ||
       pickValue(req.body, 'merchantTxnNo') ||
       pickValue(req.query, 'merchantTxnno') ||
       pickValue(req.body, 'merchantTxnno');
-    const merchantTxnNo = merchantTxnNoRaw ? String(merchantTxnNoRaw).trim() : '';
+    const addlParam1 = pickValue(req.query, 'addlParam1') || pickValue(req.body, 'addlParam1');
 
-    if (!tranCtx && !merchantTxnNo) {
-        logger.warn('PayPhi return: Missing tranCtx and merchantTxnNo');
-        return res.status(400).send('Missing tranCtx');
+    if (!tranCtx && !merchantTxnNo && !addlParam1) {
+      logger.warn('PayPhi return: Missing identifiers (tranCtx, merchantTxnNo, addlParam1)');
+      return res.status(400).send('Missing identifiers');
     }
 
     // 1. Find the Order associated with this payment reference
-    // Note: In the initiate step, we stored tranCtx into orders.payment_ref
     let order = null;
 
-    if (tranCtx) {
+    // A. By addlParam1 (Order ID) - Most reliable if present
+    if (addlParam1 && !isNaN(parseInt(addlParam1))) {
+      const q = await pool.query(
+        `SELECT order_id, order_ref, payment_status
+         FROM orders
+         WHERE order_id = $1
+         LIMIT 1`,
+        [parseInt(addlParam1)]
+      );
+      order = q.rows[0] || null;
+    }
+
+    // B. By tranCtx - Stored in orders.payment_ref during initiate
+    if (!order && tranCtx) {
       const q = await pool.query(
         `SELECT order_id, order_ref, payment_status
          FROM orders
@@ -85,74 +97,101 @@ module.exports = async (req, res) => {
       order = q.rows[0] || null;
     }
 
+    // C. By merchantTxnNo - Fallback
     if (!order && merchantTxnNo) {
-      const byTxn = await pool.query(
+      // First try exact match with order_ref
+      const byRef = await pool.query(
         `SELECT order_id, order_ref, payment_status
          FROM orders
          WHERE order_ref = $1
          LIMIT 1`,
         [merchantTxnNo]
       );
-      order = byTxn.rows[0] || null;
+      order = byRef.rows[0] || null;
+
+      if (!order && merchantTxnNo.includes('_')) {
+        // Try exact match with payment_txn_no (if we started storing it)
+        const byTxnNo = await pool.query(
+          `SELECT order_id, order_ref, payment_status
+           FROM orders
+           WHERE payment_txn_no = $1
+           LIMIT 1`,
+          [merchantTxnNo]
+        );
+        order = byTxnNo.rows[0] || null;
+      }
     }
 
     if (!order) {
-      logger.warn('PayPhi return: Order not found for tranCtx', { tranCtx });
+      logger.warn('PayPhi return: Order not found for identifiers', { tranCtx, merchantTxnNo, addlParam1 });
       return res.redirect(`${process.env.CLIENT_URL || ''}/payment/return?status=failed&reason=not_found`);
     }
 
     // 2. Trigger the Service Logic
     // This handles: API check, DB Updates (Order + Bookings), Ticket Generation, Emailing
     let success = false;
+    let paymentStatus = null;
     try {
-        const statusResult = await bookingService.checkPayPhiStatus(order.order_id);
-        success = statusResult.success;
-        logger.info('PayPhi return: Check status complete', { order_id: order.order_id, success });
+      const statusResult = await bookingService.checkPayPhiStatus(order.order_id);
+      success = statusResult.success;
+      paymentStatus = statusResult.status || 'unknown';
+      logger.info('PayPhi return: Check status complete', { order_id: order.order_id, success, paymentStatus });
+
+      // If payment status is explicitly failed, cancelled, or declined, treat as failed
+      if (['failed', 'cancelled', 'declined', 'error'].includes(paymentStatus?.toLowerCase())) {
+        success = false;
+      }
     } catch (svcErr) {
-        logger.error('PayPhi return: Service verification failed', { err: svcErr.message });
-        // If service fails, we assume payment isn't confirmed yet
+      logger.error('PayPhi return: Service verification failed', { err: svcErr.message });
+      // If service fails to check status, assume payment is incomplete/failed
+      success = false;
     }
 
     // 3. Redirect to Client
     const prefix = resolveClientBaseUrl();
+    const orderRef = order?.order_ref || '';
 
-    if (success) {
-      let primaryBookingId = null;
-      let ticketPath = null;
-      try {
-        // Find the first booking's ID, and find the first available ticket PDF for the order.
-        // Using COALESCE helps prioritize the ticket from the first booking but falls back to any other if not available.
-        const bookingRef = await pool.query(
-          `SELECT b1.booking_id, COALESCE(b1.ticket_pdf, (SELECT b2.ticket_pdf FROM bookings b2 WHERE b2.order_id = $1 AND b2.ticket_pdf IS NOT NULL ORDER BY b2.booking_id ASC LIMIT 1)) as ticket_pdf
-           FROM bookings b1
-           WHERE b1.order_id = $1
-           ORDER BY b1.booking_id ASC
-           LIMIT 1`,
-          [order.order_id]
-        );
-        const firstBooking = bookingRef.rows[0];
-        primaryBookingId = firstBooking?.booking_id || null;
-        ticketPath = firstBooking?.ticket_pdf || null;
-      } catch (lookupErr) {
-        logger.warn('PayPhi return: Failed to fetch primary booking for success redirect', { err: lookupErr.message });
-      }
-
-      const params = new URLSearchParams();
-      if (primaryBookingId) params.set('booking', primaryBookingId);
-      params.set('cart', order.order_ref);
-      if (tranCtx) params.set('tx', tranCtx);
-      const absTicketUrl = absoluteFromPath(ticketPath);
-      if (absTicketUrl) params.set('ticket', absTicketUrl);
-
-      const successUrl = `${prefix}/payment/success?${params.toString()}`;
-      return res.redirect(successUrl);
+    // Handle all failure scenarios - if not explicitly successful, treat as failed
+    if (!success) {
+      const failedUrl = `${prefix}/payment/return?order=${encodeURIComponent(orderRef)}&status=failed&reason=payment_failed&gateway=payphi`;
+      logger.warn('PayPhi return: Payment failed or incomplete, redirecting to failed page', {
+        order_id: order?.order_id,
+        payment_status: paymentStatus,
+        success
+      });
+      return res.redirect(failedUrl);
     }
 
-    const fallbackUrl = `${prefix}/payment/return?order=${encodeURIComponent(
-      order.order_ref
-    )}&status=pending`;
+    // Success case - proceed with success redirect
+    let primaryBookingId = null;
+    let ticketPath = null;
+    try {
+      // Find the first booking's ID, and find the first available ticket PDF for the order.
+      // Using COALESCE helps prioritize the ticket from the first booking but falls back to any other if not available.
+      const bookingRef = await pool.query(
+        `SELECT b1.booking_id, COALESCE(b1.ticket_pdf, (SELECT b2.ticket_pdf FROM bookings b2 WHERE b2.order_id = $1 AND b2.ticket_pdf IS NOT NULL ORDER BY b2.booking_id ASC LIMIT 1)) as ticket_pdf
+         FROM bookings b1
+         WHERE b1.order_id = $1
+         ORDER BY b1.booking_id ASC
+         LIMIT 1`,
+        [order.order_id]
+      );
+      const firstBooking = bookingRef.rows[0];
+      primaryBookingId = firstBooking?.booking_id || null;
+      ticketPath = firstBooking?.ticket_pdf || null;
+    } catch (lookupErr) {
+      logger.warn('PayPhi return: Failed to fetch primary booking for success redirect', { err: lookupErr.message });
+    }
 
-    return res.redirect(fallbackUrl);
+    const params = new URLSearchParams();
+    if (primaryBookingId) params.set('booking', primaryBookingId);
+    params.set('cart', orderRef);
+    if (tranCtx) params.set('tx', tranCtx);
+    const absTicketUrl = absoluteFromPath(ticketPath);
+    if (absTicketUrl) params.set('ticket', absTicketUrl);
+
+    const successUrl = `${prefix}/payment/success?${params.toString()}`;
+    return res.redirect(successUrl);
 
   } catch (err) {
     logger.error('PayPhi return error', { err: err.message });
