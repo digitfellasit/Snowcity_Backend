@@ -5,7 +5,7 @@ const { slugify } = require('../utils/slugify');
 // Helper function to map combo data
 function mapCombo(row) {
   if (!row) return null;
-  
+
   return {
     combo_id: row.combo_id,
     name: row.name,
@@ -19,6 +19,8 @@ function mapCombo(row) {
     active: Boolean(row.active),
     create_slots: Boolean(row.create_slots),
     meta_title: row.meta_title,
+    short_description: row.short_description,
+    description: row.description,
     // Legacy fields for backward compatibility
     attraction_1_id: row.attraction_1_id,
     attraction_2_id: row.attraction_2_id,
@@ -30,35 +32,37 @@ function mapCombo(row) {
   };
 }
 
-async function createCombo({ 
-  name, 
+async function createCombo({
+  name,
   slug,
-  attraction_ids, 
-  attraction_prices, 
-  total_price, 
-  image_url, 
+  attraction_ids,
+  attraction_prices,
+  total_price,
+  image_url,
   desktop_image_url = null,
-  discount_percent = 0, 
+  discount_percent = 0,
   active = true,
-  meta_title = null
+  meta_title = null,
+  short_description = null,
+  description = null
 }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
+
     // Generate slug if not provided
     const finalSlug = slug || slugify(name);
-    
+
     // Insert combo
     const { rows } = await client.query(
-      `INSERT INTO combos (name, slug, attraction_ids, attraction_prices, total_price, image_url, desktop_image_url, discount_percent, active, create_slots, meta_title)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10)
+      `INSERT INTO combos (name, slug, attraction_ids, attraction_prices, total_price, image_url, desktop_image_url, discount_percent, active, create_slots, meta_title, short_description, description)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10, $11, $12)
        RETURNING *`,
-      [name, finalSlug, attraction_ids, attraction_prices, total_price, image_url, desktop_image_url, discount_percent, active, meta_title]
+      [name, finalSlug, attraction_ids, attraction_prices, total_price, image_url, desktop_image_url, discount_percent, active, meta_title, short_description, description]
     );
-    
+
     const combo = mapCombo(rows[0]);
-    
+
     // Insert into junction table
     if (attraction_ids && attraction_ids.length > 0) {
       for (let i = 0; i < attraction_ids.length; i++) {
@@ -73,16 +77,16 @@ async function createCombo({
         );
       }
     }
-    
+
     await client.query('COMMIT');
-    
+
     // Always create slots automatically for new combos
     console.log('Creating automatic slots for new combo:', combo.combo_id, 'with', attraction_ids?.length, 'attractions');
     const defaultSlots = ComboSlotAutoService.generateDefaultSlots(attraction_ids.length);
     console.log('Generated default slots count:', defaultSlots.length);
     await ComboSlotAutoService.generateSlotsForCombo(combo.combo_id, defaultSlots);
     console.log('Slot generation completed for combo:', combo.combo_id);
-    
+
     return combo;
   } catch (error) {
     await client.query('ROLLBACK');
@@ -138,10 +142,10 @@ async function updateCombo(combo_id, fields = {}) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
+
     // Update main combo table
     const entries = Object.entries(fields).filter(([k, v]) => v !== undefined && !['attraction_ids', 'attraction_prices'].includes(k));
-    
+
     if (entries.length > 0) {
       const sets = [];
       const params = [];
@@ -157,12 +161,12 @@ async function updateCombo(combo_id, fields = {}) {
         params
       );
     }
-    
+
     // Update attraction relationships if provided
     if (fields.attraction_ids && fields.attraction_prices) {
       // Delete existing relationships
       await client.query('DELETE FROM combo_attractions WHERE combo_id = $1', [combo_id]);
-      
+
       // Insert new relationships
       for (const attractionId of fields.attraction_ids) {
         const price = fields.attraction_prices[attractionId] || 0;
@@ -173,7 +177,7 @@ async function updateCombo(combo_id, fields = {}) {
           [combo_id, attractionId, price, position]
         );
       }
-      
+
       // Update the main table with new arrays
       await client.query(
         `UPDATE combos SET attraction_ids = $1, attraction_prices = $2, updated_at = NOW()
@@ -181,7 +185,7 @@ async function updateCombo(combo_id, fields = {}) {
         [fields.attraction_ids, fields.attraction_prices, combo_id]
       );
     }
-    
+
     await client.query('COMMIT');
     return await getComboById(combo_id);
   } catch (error) {

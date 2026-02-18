@@ -17,12 +17,13 @@ async function createAttraction(payload) {
     video_url = null,
     slot_capacity = 0,
     meta_title = null,
+    short_description = null,
   } = payload;
 
   const { rows } = await pool.query(
     `INSERT INTO attractions
-     (title, slug, description, image_url, desktop_image_url, gallery, base_price, price_per_hour, discount_percent, active, badge, video_url, slot_capacity, meta_title)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14)
+     (title, slug, description, image_url, desktop_image_url, gallery, base_price, price_per_hour, discount_percent, active, badge, video_url, slot_capacity, meta_title, short_description)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15)
      RETURNING *`,
     [
       title,
@@ -39,18 +40,19 @@ async function createAttraction(payload) {
       video_url,
       slot_capacity,
       meta_title,
+      short_description,
     ]
   );
-  
+
   const attraction = rows[0];
-  
+
   // Always create slots automatically for new attractions
   console.log('Creating automatic slots for new attraction:', attraction.attraction_id);
   const defaultSlots = AttractionSlotAutoService.generateDefaultSlots(1); // 1-hour slots for attractions
   console.log('Generated default slots count:', defaultSlots.length);
   await AttractionSlotAutoService.generateSlotsForAttraction(attraction.attraction_id, defaultSlots);
   console.log('Slot generation completed for attraction:', attraction.attraction_id);
-  
+
   return attraction;
 }
 
@@ -70,7 +72,7 @@ async function listAttractions({ search = '', active = null, limit = 50, offset 
   let i = 1;
 
   if (search) {
-    where.push(`(title ILIKE $${i} OR description ILIKE $${i})`);
+    where.push(`(title ILIKE $${i} OR description ILIKE $${i} OR short_description ILIKE $${i})`);
     params.push(`%${search}%`);
     i += 1;
   }

@@ -438,19 +438,78 @@ async function computeTotals(item = {}) {
 
   const effectiveSlotId = slotType === 'combo' && isVirtualComboSlotId(slotId) ? null : slotId;
 
-  const pricing = await applyOfferPricing({
-    targetType: item_type === 'Combo' ? 'combo' : 'attraction',
-    targetId: item_type === 'Combo' ? item.combo_id : item.attraction_id,
-    slotType,
-    slotId: effectiveSlotId,
-    baseAmount: baseUnit,
-    booking_date: item.booking_date,
-    // Use explicit slot start time when available so offer time windows are matched
-    booking_time: item.slot_start_time || item.slotStartTime || item.booking_time || null,
-  });
+  let unit = baseUnit;
+  let unitDiscount = 0;
+  let offer = null;
+  let offerId = null;
 
-  const unit = pricing.unit;
-  const unitDiscount = pricing.discount;
+  // Try dynamic pricing service first (to support weekend/holiday rules + offers)
+  let appliedDynamic = false;
+  if (dynamicPricingService && dynamicPricingService.calculateDynamicPrice) {
+    try {
+      // Calculate dynamic price (adjustments + discounts)
+      const pricingResult = await dynamicPricingService.calculateDynamicPrice({
+        itemType: item_type === 'Combo' ? 'combo' : 'attraction',
+        itemId: item_type === 'Combo' ? item.combo_id : item.attraction_id,
+        basePrice: baseUnit,
+        date: new Date(item.booking_date),
+        time: item.slot_start_time || item.slotStartTime || item.booking_time || '12:00:00',
+        quantity: 1, // Calculate per-unit price
+      });
+
+      // Update unit and discount from dynamic result
+      unit = pricingResult.finalPrice;
+      // Discount amount from dynamic pricing includes offers.
+      // Note: If dynamic adjustment increased price (surcharge), discountAmount is 0.
+      unitDiscount = pricingResult.discountAmount;
+
+      // Reconstruct the "gross" base unit price.
+      // If surcharge applied: finalPrice > baseUnit. discount = 0.
+      // We want baseUnit (gross) to match finalPrice so no discount shows?
+      // Or should we show surcharge as negative discount? No, better to update base price.
+      // dynamicBase = Final + Discount.
+      const dynamicBase = unit + unitDiscount;
+      baseUnit = dynamicBase;
+
+      if (pricingResult.appliedRules && pricingResult.appliedRules.length > 0) {
+        // Extract offer details logic
+        // Find if any rule has an offerId (discounts)
+        const offerRule = pricingResult.appliedRules.find(r => r.offerId);
+        offerId = offerRule ? offerRule.offerId : null;
+
+        // Construct offer object similar to what applyOfferPricing returns
+        offer = {
+          offer_id: offerId,
+          title: pricingResult.appliedRules.map(r => r.offerTitle || r.ruleName).filter(Boolean).join(', '),
+          applied_rules: pricingResult.appliedRules,
+          discount_value: unitDiscount,
+          // Add other fields if needed by frontend/ticket
+        };
+      }
+      appliedDynamic = true;
+    } catch (err) {
+      console.error('Dynamic pricing calculation failed in bookingService, falling back:', err);
+    }
+  }
+
+  // Fallback to legacy offer pricing if dynamic failed or service missing/not applied
+  if (!appliedDynamic) {
+    const pricing = await applyOfferPricing({
+      targetType: item_type === 'Combo' ? 'combo' : 'attraction',
+      targetId: item_type === 'Combo' ? item.combo_id : item.attraction_id,
+      slotType,
+      slotId: effectiveSlotId,
+      baseAmount: baseUnit,
+      booking_date: item.booking_date,
+      // Use explicit slot start time when available so offer time windows are matched
+      booking_time: item.slot_start_time || item.slotStartTime || item.booking_time || null,
+    });
+    unit = pricing.unit;
+    unitDiscount = pricing.discount;
+    offer = pricing.offer;
+    offerId = pricing.offer?.offer_id || null;
+  }
+
   const ticketsTotal = unit * qty;
   const baseTicketsTotal = baseUnit * qty;
   const offerDiscountTotal = unitDiscount * qty;
@@ -472,8 +531,8 @@ async function computeTotals(item = {}) {
     base_unit_price: baseUnit,
     unit_price: unit,
     unit_discount: unitDiscount,
-    offer: pricing.offer,
-    offer_id: pricing.offer?.offer_id || null,
+    offer: offer,
+    offer_id: offerId,
     combo_details: comboDetails,
   };
 }
