@@ -27,6 +27,7 @@ router.use('/', require('./combos.public'));
 router.use('/', require('./gallery.public'));
 router.use('/', require('./pages.public'));
 router.use('/', require('./blogs.public'));
+router.use('/track', require('./tracking.routes'));
 router.use('/payments', require('./payments.routes'));
 router.use('/webhooks', require('./webhooks.routes'));
 

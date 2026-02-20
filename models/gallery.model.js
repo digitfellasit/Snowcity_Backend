@@ -20,6 +20,7 @@ function map(row) {
     gallery_item_id: row.gallery_item_id,
     media_type: row.media_type,
     url: row.url,
+    image_alt: row.image_alt,
     title: row.title,
     description: row.description,
     target_type: row.target_type || 'none',
@@ -31,14 +32,14 @@ function map(row) {
   };
 }
 
-async function create({ media_type, url, title = null, description = null, target_type = 'none', target_ref_id = null, active = true }) {
+async function create({ media_type, url, image_alt = null, title = null, description = null, target_type = 'none', target_ref_id = null, active = true }) {
   const normalizedType = normalizeTargetType(target_type);
   const normalizedRef = normalizeTargetRef(normalizedType, target_ref_id);
   const { rows } = await pool.query(
-    `INSERT INTO gallery_items (media_type, url, title, description, target_type, target_ref_id, active)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO gallery_items (media_type, url, image_alt, title, description, target_type, target_ref_id, active)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
-    [media_type, url, title, description, normalizedType, normalizedRef, active]
+    [media_type, url, image_alt, title, description, normalizedType, normalizedRef, active]
   );
   return map(rows[0]);
 }
@@ -140,7 +141,7 @@ async function bulkDelete(ids) {
   if (!Array.isArray(ids) || ids.length === 0) {
     return { deletedCount: 0 };
   }
-  
+
   const { rowCount } = await pool.query(
     `DELETE FROM gallery_items WHERE gallery_item_id = ANY($1::bigint[])`,
     [ids]

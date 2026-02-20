@@ -54,6 +54,7 @@ exports.create = async (req, res, next) => {
     const {
       media_type,
       url,
+      image_alt = null,
       title = null,
       description = null,
       active = true,
@@ -61,7 +62,7 @@ exports.create = async (req, res, next) => {
       target_ref_id = null,
     } = req.body || {};
     if (!media_type || !url) return res.status(400).json({ error: 'media_type and url are required' });
-    const row = await galleryModel.create({ media_type, url, title, description, active, target_type, target_ref_id });
+    const row = await galleryModel.create({ media_type, url, image_alt, title, description, active, target_type, target_ref_id });
     res.status(201).json(row);
   } catch (err) { next(err); }
 };

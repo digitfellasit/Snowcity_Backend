@@ -1,11 +1,11 @@
 const { pool } = require('../config/db');
 
-async function createAddon({ title, description = null, price, discount_percent = 0, image_url = null, active = true }) {
+async function createAddon({ title, description = null, price, discount_percent = 0, image_url = null, image_alt = null, active = true }) {
   const { rows } = await pool.query(
-    `INSERT INTO addons (title, description, price, discount_percent, image_url, active)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO addons (title, description, price, discount_percent, image_url, image_alt, active)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
-    [title, description, price, discount_percent, image_url, active]
+    [title, description, price, discount_percent, image_url, image_alt, active]
   );
   return rows[0];
 }

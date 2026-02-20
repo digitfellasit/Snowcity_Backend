@@ -34,6 +34,7 @@ router.post('/:id/resend-ticket', ctrl.resendTicket);
 router.post('/:id/resend-whatsapp', ctrl.resendWhatsApp);
 router.post('/:id/resend-email', ctrl.resendEmail);
 router.post('/:id/send-test-email', ctrl.sendTestEmail);
+router.get('/:id/ticket', ctrl.downloadTicket);
 router.delete('/:id', ctrl.deleteBooking);
 
 // PayPhi (admin) - No permissions required

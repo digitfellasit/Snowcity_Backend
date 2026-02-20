@@ -14,8 +14,11 @@ router.get('/me/bookings', requireAuth, bookingsCtrl.listMyBookings);
 
 // --- FIXED LINE BELOW ---
 // Changed 'getMyBookingById' to 'getOrderDetails'
-router.get('/me/bookings/:id', requireAuth, bookingsCtrl.getOrderDetails); 
+router.get('/me/bookings/:id', requireAuth, bookingsCtrl.getOrderDetails);
 
 router.get('/me/notifications', requireAuth, notificationsCtrl.listMyNotifications);
+
+// Ticket download (generated on-the-fly, no file storage)
+router.get('/me/bookings/:id/ticket', requireAuth, bookingsCtrl.downloadTicket);
 
 module.exports = router;

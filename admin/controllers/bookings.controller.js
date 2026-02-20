@@ -272,19 +272,14 @@ exports.createManualBooking = async function createManualBooking(req, res, next)
         payment_status: 'Completed',
         payment_ref: booking.booking_ref,
       });
+      // PDF generated on-the-fly when needed — no file storage
       try {
-        const urlPath = await ticketService.generateTicket(booking.booking_id);
-        await bookingsModel.updateBooking(booking.booking_id, { ticket_pdf: urlPath });
-        try {
-          const sent = await interaktService.sendTicketForBooking(booking.booking_id); // check consent for automatic send
-          if (sent && sent.success) {
-            await bookingsModel.updateBooking(booking.booking_id, { whatsapp_sent: true });
-          }
-        } catch (e) {
-          console.error('Failed to send WhatsApp ticket (createManualBooking):', e?.message || e);
+        const sent = await interaktService.sendTicketForBooking(booking.booking_id);
+        if (sent && sent.success) {
+          await bookingsModel.updateBooking(booking.booking_id, { whatsapp_sent: true });
         }
       } catch (e) {
-        // non-fatal
+        console.error('Failed to send WhatsApp ticket (createManualBooking):', e?.message || e);
       }
     }
 
@@ -344,19 +339,14 @@ exports.updateBooking = async function updateBooking(req, res, next) {
     if (!updated) return res.status(404).json({ error: 'Booking not found' });
 
     if (payload.payment_status === 'Completed') {
+      // PDF generated on-the-fly when needed — no file storage
       try {
-        const urlPath = await ticketService.generateTicket(id);
-        await bookingsModel.updateBooking(id, { ticket_pdf: urlPath });
-        try {
-          const sent = await interaktService.sendTicketForBooking(id);
-          if (sent && sent.success) {
-            await bookingsModel.updateBooking(id, { whatsapp_sent: true });
-          }
-        } catch (e) {
-          console.error('Failed to send WhatsApp ticket (updateBooking):', e?.message || e);
+        const sent = await interaktService.sendTicketForBooking(id);
+        if (sent && sent.success) {
+          await bookingsModel.updateBooking(id, { whatsapp_sent: true });
         }
       } catch (e) {
-        // non-fatal
+        console.error('Failed to send WhatsApp ticket (updateBooking):', e?.message || e);
       }
     }
     res.json(updated);
@@ -382,34 +372,26 @@ exports.resendTicket = async function resendTicket(req, res, next) {
       return res.status(400).json({ error: 'Cannot resend ticket without user information' });
     }
 
-    let ticketPath = booking.ticket_pdf;
-    if (!ticketPath) {
-      ticketPath = await ticketService.generateTicket(id);
-      await bookingsModel.updateBooking(id, { ticket_pdf: ticketPath });
-    }
-
+    // Generate PDF on-the-fly — no file storage
     await bookingsModel.updateBooking(id, { email_sent: false });
     const result = await ticketEmailService.sendTicketEmail(id);
 
     // Also send WhatsApp
     let whatsappResult = null;
     try {
-      console.log('🔍 DEBUG WhatsApp: Attempting to send ticket for booking', id);
-      const sent = await interaktService.sendTicketForBookingInstant(id, true); // use instant send for admin resend
+      const sent = await interaktService.sendTicketForBookingInstant(id, true);
       if (sent && sent.success) {
         await bookingsModel.updateBooking(id, { whatsapp_sent: true });
         whatsappResult = sent;
-        console.log('info: WhatsApp sent successfully for booking', id);
       } else {
         whatsappResult = { success: false, reason: sent?.reason || 'Send failed' };
-        console.log('info: WhatsApp send failed for booking', id, 'reason:', whatsappResult.reason);
       }
     } catch (e) {
       console.error('Failed to resend WhatsApp ticket:', e?.message || e);
       whatsappResult = { success: false, error: e?.message || 'Unknown error' };
     }
 
-    res.json({ success: true, ticket_pdf: ticketPath, email: result, whatsapp: whatsappResult });
+    res.json({ success: true, email: result, whatsapp: whatsappResult });
   } catch (err) {
     next(err);
   }
@@ -432,18 +414,13 @@ exports.resendWhatsApp = async function resendWhatsApp(req, res, next) {
       return res.status(400).json({ error: 'Cannot resend WhatsApp without user information' });
     }
 
-    let ticketPath = booking.ticket_pdf;
-    if (!ticketPath) {
-      ticketPath = await ticketService.generateTicket(id);
-      await bookingsModel.updateBooking(id, { ticket_pdf: ticketPath });
-    }
-
+    // PDF generated on-the-fly — no file storage
     try {
-      const sent = await interaktService.sendTicketForBookingInstant(id); // use instant send for admin resend
+      const sent = await interaktService.sendTicketForBookingInstant(id, true);
       if (sent && sent.success) {
         await bookingsModel.updateBooking(id, { whatsapp_sent: true });
       }
-      return res.json({ success: true, ticket_pdf: ticketPath, whatsapp: sent });
+      return res.json({ success: true, whatsapp: sent });
     } catch (e) {
       console.error('Failed to resend WhatsApp ticket:', e?.message || e);
       return res.status(502).json({ success: false, error: e?.message || 'Failed to send WhatsApp' });
@@ -470,16 +447,11 @@ exports.resendEmail = async function resendEmail(req, res, next) {
       return res.status(400).json({ error: 'Cannot resend email without user information' });
     }
 
-    let ticketPath = booking.ticket_pdf;
-    if (!ticketPath) {
-      ticketPath = await ticketService.generateTicket(id);
-      await bookingsModel.updateBooking(id, { ticket_pdf: ticketPath });
-    }
-
+    // PDF generated on-the-fly — no file storage
     await bookingsModel.updateBooking(id, { email_sent: false });
     try {
       const result = await ticketEmailService.sendTicketEmail(id);
-      return res.json({ success: true, ticket_pdf: ticketPath, email: result });
+      return res.json({ success: true, email: result });
     } catch (e) {
       console.error('Failed to resend ticket email:', e?.message || e);
       return res.status(502).json({ success: false, error: e?.message || 'Failed to send email' });
@@ -487,6 +459,23 @@ exports.resendEmail = async function resendEmail(req, res, next) {
   } catch (err) {
     next(err);
   }
+}
+
+// Download Ticket PDF (generated on-the-fly, never stored)
+exports.downloadTicket = async function downloadTicket(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const booking = await bookingsModel.getBookingById(id);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+
+    // Generate PDF buffer on-the-fly
+    const { buffer, filename } = await ticketService.generateTicketBuffer(id);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  } catch (err) { next(err); }
 }
 
 exports.sendTestEmail = async function sendTestEmail(req, res, next) {
@@ -653,12 +642,12 @@ exports.refundPayPhi = async function refundPayPhi(req, res, next) {
 exports.getBookingCalendar = async (req, res, next) => {
   try {
     const { from, to, attraction_id, combo_id } = req.query;
-    
+
     // Scoping
     const scopes = req.user.scopes || {};
     const attractionScope = scopes.attraction || [];
     const comboScope = scopes.combo || [];
-    
+
     // Validate scope filters
     if (attraction_id && attractionScope.length && !attractionScope.includes('*') && !attractionScope.includes(Number(attraction_id))) {
       return res.status(403).json({ error: 'Forbidden: attraction not in scope' });
@@ -686,12 +675,12 @@ exports.getBookingCalendar = async (req, res, next) => {
 exports.getBookingSlots = async (req, res, next) => {
   try {
     const { date, attraction_id, combo_id } = req.query;
-    
+
     // Scoping
     const scopes = req.user.scopes || {};
     const attractionScope = scopes.attraction || [];
     const comboScope = scopes.combo || [];
-    
+
     // Validate scope filters
     if (attraction_id && attractionScope.length && !attractionScope.includes('*') && !attractionScope.includes(Number(attraction_id))) {
       return res.status(403).json({ error: 'Forbidden: attraction not in scope' });

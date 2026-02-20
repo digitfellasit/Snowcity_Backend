@@ -6,7 +6,9 @@ function mapBanner(row) {
   return {
     banner_id: row.banner_id,
     web_image: row.web_image,
+    web_image_alt: row.web_image_alt,
     mobile_image: row.mobile_image,
+    mobile_image_alt: row.mobile_image_alt,
     title: row.title,
     description: row.description,
     linked_attraction_id: row.linked_attraction_id,
@@ -19,7 +21,9 @@ function mapBanner(row) {
 
 async function createBanner({
   web_image = null,
+  web_image_alt = null,
   mobile_image = null,
+  mobile_image_alt = null,
   title = null,
   description = null,
   linked_attraction_id = null,
@@ -27,10 +31,10 @@ async function createBanner({
   active = true,
 }) {
   const { rows } = await pool.query(
-    `INSERT INTO banners (web_image, mobile_image, title, description, linked_attraction_id, linked_offer_id, active)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO banners (web_image, web_image_alt, mobile_image, mobile_image_alt, title, description, linked_attraction_id, linked_offer_id, active)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
-    [web_image, mobile_image, title, description, linked_attraction_id, linked_offer_id, active]
+    [web_image, web_image_alt, mobile_image, mobile_image_alt, title, description, linked_attraction_id, linked_offer_id, active]
   );
   return mapBanner(rows[0]);
 }
@@ -59,19 +63,19 @@ async function listBanners({ active = null, attraction_id = null, offer_id = nul
   }
 
   const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
-  
+
   // Add limit and offset with correct parameter indices
   params.push(Number(limit));
   params.push(Number(offset));
-  
+
   const limitParam = paramIndex;
   const offsetParam = paramIndex + 1;
-  
+
   const query = `SELECT b.* FROM banners b
      ${whereSql}
      ORDER BY b.created_at DESC
      LIMIT $${limitParam} OFFSET $${offsetParam}`;
-  
+
   try {
     logger.debug('Executing listBanners query', { query, params, paramIndex, limitParam, offsetParam });
     const { rows } = await pool.query(query, params);

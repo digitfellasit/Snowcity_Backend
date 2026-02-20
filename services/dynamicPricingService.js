@@ -8,18 +8,18 @@ const comboDatePricesModel = require('../models/comboDatePrices.model');
  */
 function getDayType(date, holidays = []) {
   const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
-  
+
   // Check if it's a holiday
   const dateStr = date.toISOString().split('T')[0];
   if (holidays.includes(dateStr)) {
     return 'holiday';
   }
-  
+
   // Check weekend
   if (dayOfWeek === 0 || dayOfWeek === 6) {
     return 'weekend';
   }
-  
+
   // Weekday
   return 'weekday';
 }
@@ -36,7 +36,7 @@ function matchesDateRule(rule, date, time) {
       return false;
     }
   }
-  
+
   // Check specific time match
   if (rule.specific_time) {
     const bookingTime = time.substring(0, 5); // HH:MM format
@@ -45,7 +45,7 @@ function matchesDateRule(rule, date, time) {
       return false;
     }
   }
-  
+
   return true;
 }
 
@@ -56,23 +56,23 @@ function matchesDayRule(rule, date, holidays = []) {
   if (!rule.day_type) {
     return true; // No day restriction
   }
-  
+
   const dayOfWeek = date.getDay();
   const dateStr = date.toISOString().split('T')[0];
-  
+
   switch (rule.day_type) {
     case 'weekday':
       return dayOfWeek >= 1 && dayOfWeek <= 5; // Monday to Friday
-    
+
     case 'weekend':
       return dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
-    
+
     case 'holiday':
       return holidays.includes(dateStr);
-    
+
     case 'custom':
       return rule.specific_days && rule.specific_days.includes(dayOfWeek);
-    
+
     default:
       return true;
   }
@@ -110,28 +110,28 @@ async function getApplicableRules({ itemType, itemId, date, time, holidays = [] 
       )
     ORDER BY r.priority ASC, o.created_at DESC
   `;
-  
+
   const { rows } = await pool.query(query, [dateStr, itemType, itemId, time]);
-  
+
   // Filter rules based on day type and specific date/time matching
   return rows.filter(rule => {
     // First check specific date/time match
     if (!matchesDateRule(rule, date, time)) {
       return false;
     }
-    
+
     // For happy hour rules, ensure time range is specified and matches
     if (rule.rule_type === 'happy_hour') {
       if (!rule.time_from || !rule.time_to) {
         return false; // Happy hour rules must have time ranges
       }
     }
-    
+
     // Then check day type matching (for dynamic pricing and happy hour rules)
     if (rule.rule_type === 'dynamic_pricing' || rule.rule_type === 'happy_hour') {
       return matchesDayRule(rule, date, holidays);
     }
-    
+
     // For date_slot_pricing, only check specific date/time match
     return true;
   });
@@ -148,34 +148,34 @@ async function calculateDynamicPrice({ itemType, itemId, basePrice, date, time, 
   if (itemType === 'attraction') {
     const datePrice = await attractionDatePricesModel.getDatePrice(itemId, dateStr);
     if (datePrice) {
-      effectiveBasePrice = parseFloat(datePrice.price);
+      effectiveBasePrice = Number(datePrice.price) || basePrice;
     }
   } else if (itemType === 'combo') {
     const datePrice = await comboDatePricesModel.getDatePrice(itemId, dateStr);
     if (datePrice) {
-      effectiveBasePrice = parseFloat(datePrice.price);
+      effectiveBasePrice = Number(datePrice.price) || basePrice;
     }
   }
 
   // First check if there are dynamic pricing rules for this date
   const dynamicPricingRules = await dynamicPricingModel.getApplicableRules(itemType, itemId, dateStr);
-  
+
   if (dynamicPricingRules.length > 0) {
     // Apply dynamic pricing: calculate adjusted price from effective base price
     let finalPrice = effectiveBasePrice;
     const appliedRules = [];
-    
+
     for (const rule of dynamicPricingRules) {
       let adjustment = 0;
-      
+
       if (rule.price_adjustment_type === 'fixed') {
-        adjustment = rule.price_adjustment_value;
+        adjustment = Number(rule.price_adjustment_value) || 0;
       } else if (rule.price_adjustment_type === 'percentage') {
-        adjustment = (effectiveBasePrice * rule.price_adjustment_value) / 100;
+        adjustment = (effectiveBasePrice * (Number(rule.price_adjustment_value) || 0)) / 100;
       }
-      
+
       finalPrice += adjustment;
-      
+
       appliedRules.push({
         ruleId: rule.rule_id,
         ruleName: rule.name,
@@ -185,10 +185,10 @@ async function calculateDynamicPrice({ itemType, itemId, basePrice, date, time, 
         type: 'dynamic_pricing_adjustment'
       });
     }
-    
+
     // Ensure price doesn't go below 0
     finalPrice = Math.max(0, finalPrice);
-    
+
     return {
       originalPrice: effectiveBasePrice,
       finalPrice,
@@ -197,10 +197,10 @@ async function calculateDynamicPrice({ itemType, itemId, basePrice, date, time, 
       totalPrice: finalPrice * quantity
     };
   }
-  
+
   // No dynamic pricing rules, apply normal offers logic
   const rules = await getApplicableRules({ itemType, itemId, date, time, holidays });
-  
+
   if (!rules.length) {
     return {
       originalPrice: effectiveBasePrice,
@@ -210,21 +210,21 @@ async function calculateDynamicPrice({ itemType, itemId, basePrice, date, time, 
       totalPrice: effectiveBasePrice * quantity
     };
   }
-  
+
   let finalPrice = effectiveBasePrice;
   let discountAmount = 0;
   const appliedRules = [];
-  
+
   for (const rule of rules) {
     const discountType = rule.rule_discount_type || rule.offer_discount_type;
-    const discountValue = rule.rule_discount_value || rule.offer_discount_value;
-    
+    const discountValue = Number(rule.rule_discount_value || rule.offer_discount_value) || 0;
+
     if (!discountType || discountValue === null || discountValue === 0) {
       continue;
     }
-    
+
     let ruleDiscount = 0;
-    
+
     if (discountType === 'percent') {
       ruleDiscount = (finalPrice * discountValue) / 100;
       // Apply max discount if specified
@@ -234,22 +234,22 @@ async function calculateDynamicPrice({ itemType, itemId, basePrice, date, time, 
     } else if (discountType === 'amount') {
       ruleDiscount = discountValue;
     }
-    
+
     // Apply the discount
     finalPrice = Math.max(0, finalPrice - ruleDiscount);
     discountAmount += ruleDiscount;
-    
+
     appliedRules.push({
       ruleId: rule.rule_id,
       offerId: rule.offer_id,
       offerTitle: rule.title,
       discountType,
       discountValue,
-      discountAmount: ruleDiscount,
+      discountAmount: Number(ruleDiscount) || 0,
       dayType: rule.day_type,
       priority: rule.priority
     });
-    
+
     // Stop if price reaches 0
     if (finalPrice <= 0) {
       break;
@@ -259,7 +259,7 @@ async function calculateDynamicPrice({ itemType, itemId, basePrice, date, time, 
   return {
     originalPrice: effectiveBasePrice,
     finalPrice: Math.max(0, finalPrice),
-    discountAmount,
+    discountAmount: Number(discountAmount) || 0,
     appliedRules,
     totalPrice: Math.max(0, finalPrice) * quantity
   };
@@ -278,9 +278,9 @@ async function getHolidays(year = new Date().getFullYear()) {
     `${year}-10-02`, // Gandhi Jayanti
     `${year}-12-25`, // Christmas
   ];
-  
+
   // Could add dynamic holidays like Diwali, Eid, etc.
-  
+
   return commonHolidays;
 }
 

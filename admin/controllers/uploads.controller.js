@@ -1,5 +1,5 @@
 const logger = require('../../config/logger');
-const { saveToLocal } = require('../../utils/uploader');
+const { saveToS3, saveToLocal } = require('../../utils/uploader');
 const mediaModel = require('../../models/mediaFiles.model');
 
 function parseBoolean(value, defaultValue = true) {
@@ -9,6 +9,32 @@ function parseBoolean(value, defaultValue = true) {
   if (['false', '0', 'no', 'off'].includes(normalized)) return false;
   if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
   return defaultValue;
+}
+
+/**
+ * Determine if S3 is configured and should be used.
+ */
+function useS3() {
+  return !!(process.env.AWS_ACCESS_KEY_ID && process.env.S3_BUCKET);
+}
+
+/**
+ * Upload a single file – to S3 if configured, otherwise local fallback.
+ */
+async function uploadFile(file, { folder, optimize }) {
+  if (useS3()) {
+    const s3Result = await saveToS3(file, { folder: folder || 'uploads', optimize });
+    return {
+      urlPath: s3Result.url,
+      relativePath: s3Result.key,
+      filename: s3Result.key.split('/').pop(),
+      size: file.size || file.buffer?.length || 0,
+      mimetype: file.mimetype,
+      folder: folder || '',
+    };
+  }
+  // Fallback to local storage
+  return saveToLocal(file, { folder, optimize });
 }
 
 exports.uploadSingleImage = async (req, res, next) => {
@@ -26,9 +52,10 @@ exports.uploadSingleImage = async (req, res, next) => {
       size: req.file.size,
       folder,
       optimize,
+      storage: useS3() ? 's3' : 'local',
     });
 
-    const result = await saveToLocal(req.file, { folder, optimize });
+    const result = await uploadFile(req.file, { folder, optimize });
 
     const media = await mediaModel.createMedia({
       url_path: result.urlPath,
@@ -70,12 +97,13 @@ exports.uploadBulkImages = async (req, res, next) => {
       count: req.files.length,
       folder,
       optimize,
+      storage: useS3() ? 's3' : 'local',
     });
 
     const results = [];
     for (const file of req.files) {
       try {
-        const result = await saveToLocal(file, { folder, optimize });
+        const result = await uploadFile(file, { folder, optimize });
         const media = await mediaModel.createMedia({
           url_path: result.urlPath,
           relative_path: result.relativePath,

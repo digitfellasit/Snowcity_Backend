@@ -436,6 +436,13 @@ async function computeTotals(item = {}) {
     }
   }
 
+  console.log('🔍 computeTotals STEP 1 - Base prices:', {
+    item_type, qty, baseUnit,
+    attraction_id: item.attraction_id,
+    combo_id: item.combo_id,
+    slot_id: item.slot_id,
+  });
+
   const effectiveSlotId = slotType === 'combo' && isVirtualComboSlotId(slotId) ? null : slotId;
 
   let unit = baseUnit;
@@ -457,33 +464,30 @@ async function computeTotals(item = {}) {
         quantity: 1, // Calculate per-unit price
       });
 
-      // Update unit and discount from dynamic result
-      unit = pricingResult.finalPrice;
-      // Discount amount from dynamic pricing includes offers.
-      // Note: If dynamic adjustment increased price (surcharge), discountAmount is 0.
-      unitDiscount = pricingResult.discountAmount;
+      console.log('🔍 computeTotals STEP 2 - Dynamic pricing result:', {
+        originalPrice: pricingResult.originalPrice,
+        finalPrice: pricingResult.finalPrice,
+        discountAmount: pricingResult.discountAmount,
+        appliedRules: pricingResult.appliedRules?.length || 0,
+      });
 
-      // Reconstruct the "gross" base unit price.
-      // If surcharge applied: finalPrice > baseUnit. discount = 0.
-      // We want baseUnit (gross) to match finalPrice so no discount shows?
-      // Or should we show surcharge as negative discount? No, better to update base price.
-      // dynamicBase = Final + Discount.
+      // CRITICAL: cast to Number — dynamicPricingService can return strings
+      // e.g. discountAmount = '0100.00' which causes string concatenation
+      unit = Number(pricingResult.finalPrice) || 0;
+      unitDiscount = Number(pricingResult.discountAmount) || 0;
+
       const dynamicBase = unit + unitDiscount;
       baseUnit = dynamicBase;
 
       if (pricingResult.appliedRules && pricingResult.appliedRules.length > 0) {
-        // Extract offer details logic
-        // Find if any rule has an offerId (discounts)
         const offerRule = pricingResult.appliedRules.find(r => r.offerId);
         offerId = offerRule ? offerRule.offerId : null;
 
-        // Construct offer object similar to what applyOfferPricing returns
         offer = {
           offer_id: offerId,
           title: pricingResult.appliedRules.map(r => r.offerTitle || r.ruleName).filter(Boolean).join(', '),
           applied_rules: pricingResult.appliedRules,
           discount_value: unitDiscount,
-          // Add other fields if needed by frontend/ticket
         };
       }
       appliedDynamic = true;
@@ -501,7 +505,6 @@ async function computeTotals(item = {}) {
       slotId: effectiveSlotId,
       baseAmount: baseUnit,
       booking_date: item.booking_date,
-      // Use explicit slot start time when available so offer time windows are matched
       booking_time: item.slot_start_time || item.slotStartTime || item.booking_time || null,
     });
     unit = pricing.unit;
@@ -520,6 +523,13 @@ async function computeTotals(item = {}) {
   const discount_amount = offerDiscountTotal;
   const total_amount = preDiscount; // Gross
   const final_amount = Math.max(0, total_amount - discount_amount); // Net
+
+  console.log('🔍 computeTotals FINAL:', {
+    baseUnit, unit, unitDiscount, qty,
+    ticketsTotal, baseTicketsTotal, offerDiscountTotal, addonsTotal,
+    total_amount, discount_amount, final_amount,
+    appliedDynamic,
+  });
 
   return {
     quantity: qty,
@@ -708,22 +718,23 @@ async function initiatePayPhiPayment({ bookingId, email, mobile, amount: fronten
 
   // Generate unique merchantTxnNo for each payment attempt to avoid duplicates
   const merchantTxnNo = `ORD${order.order_ref}_${Date.now()}`;
-  // Calculate final amount: total_amount - discount_amount
-  const totalAmount = Number(order.total_amount || 0);
-  const discountAmount = Number(order.discount_amount || 0);
-  const amount = order.final_amount ?? Math.max(0, totalAmount - discountAmount);
 
-  // Log for verification
-  console.log('💰 Payment Amount Calculation:', {
-    totalAmount,
-    discountAmount,
-    finalAmountFromDB: order.final_amount,
-    calculatedAmount: amount,
-    frontendAmount,
-    orderId
+  // Use the frontend-supplied amount as the authoritative payment amount.
+  // The frontend calculates from the same price sources and has been verified correct.
+  const amount = Number(frontendAmount);
+
+  // Log for verification / debugging
+  const dbTotal = Number(order.total_amount || 0);
+  const dbDiscount = Number(order.discount_amount || 0);
+  console.log('💰 PayPhi Payment Amount:', {
+    frontendAmount: amount,
+    dbTotal,
+    dbDiscount,
+    dbFinalAmount: order.final_amount,
+    orderId,
   });
 
-  if (!amount || Number(amount) <= 0) {
+  if (!amount || amount <= 0) {
     const e = new Error('Order total must be greater than zero to initiate payment');
     e.status = 400;
     throw e;
@@ -797,18 +808,8 @@ async function checkPayPhiStatus(orderId) {
       );
     });
 
-    // Generate Tickets
-    const bookingsRes = await pool.query(`SELECT booking_id FROM bookings WHERE order_id = $1`, [order.order_id]);
-    for (const row of bookingsRes.rows) {
-      try {
-        const urlPath = await ticketService.generateTicket(row.booking_id);
-        await pool.query(`UPDATE bookings SET ticket_pdf = $1 WHERE booking_id = $2`, [urlPath, row.booking_id]);
-
-        // WhatsApp ticket will be sent by the order-level function to avoid duplicates
-      } catch (err) {
-        console.error(`Ticket workflow failed for booking ${row.booking_id}`, err);
-      }
-    }
+    // Ticket PDFs are generated on-the-fly when needed (download, email, WhatsApp)
+    // No disk storage — generate buffer and send directly
 
     // Send single combined email for the entire order
     try {
@@ -817,7 +818,7 @@ async function checkPayPhiStatus(orderId) {
       console.error('Failed to send order email', err);
     }
 
-    // Send WhatsApp ticket for the entire order (prevents duplicates)
+    // Send WhatsApp ticket for the entire order
     try {
       await interaktService.sendTicketForOrder(order.order_id);
     } catch (err) {
@@ -844,22 +845,22 @@ async function initiatePhonePePayment({ bookingId, email, mobile, amount: fronte
   }
 
   const merchantTxnNo = `ORD_${orderId}_${Math.floor(Date.now() / 1000)}`;
-  // Calculate final amount: total_amount - discount_amount
-  const totalAmount = Number(order.total_amount || 0);
-  const discountAmount = Number(order.discount_amount || 0);
-  const amount = order.final_amount ?? Math.max(0, totalAmount - discountAmount);
 
-  // Log for verification
-  console.log('💰 PhonePe Payment Amount Calculation:', {
-    totalAmount,
-    discountAmount,
-    finalAmountFromDB: order.final_amount,
-    calculatedAmount: amount,
-    frontendAmount,
-    orderId
+  // Use the frontend-supplied amount as the authoritative payment amount.
+  const amount = Number(frontendAmount);
+
+  // Log for verification / debugging
+  const dbTotal = Number(order.total_amount || 0);
+  const dbDiscount = Number(order.discount_amount || 0);
+  console.log('💰 PhonePe Payment Amount:', {
+    frontendAmount: amount,
+    dbTotal,
+    dbDiscount,
+    dbFinalAmount: order.final_amount,
+    orderId,
   });
 
-  if (!amount || Number(amount) <= 0) {
+  if (!amount || amount <= 0) {
     const e = new Error('Order total must be greater than zero to initiate payment');
     e.status = 400;
     throw e;
@@ -950,16 +951,8 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
       );
     });
 
-    // Generate Tickets
-    const bookingsRes = await pool.query(`SELECT booking_id FROM bookings WHERE order_id = $1`, [order.order_id]);
-    for (const row of bookingsRes.rows) {
-      try {
-        const urlPath = await ticketService.generateTicket(row.booking_id);
-        await pool.query(`UPDATE bookings SET ticket_pdf = $1 WHERE booking_id = $2`, [urlPath, row.booking_id]);
-      } catch (err) {
-        console.error(`Ticket workflow failed for booking ${row.booking_id}`, err);
-      }
-    }
+    // Ticket PDFs are generated on-the-fly when needed (download, email, WhatsApp)
+    // No disk storage
 
     // Send single combined email for the entire order
     try {
@@ -968,7 +961,7 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
       console.error('Failed to send order email', err);
     }
 
-    // Send WhatsApp ticket for the entire order (prevents duplicates)
+    // Send WhatsApp ticket for the entire order
     try {
       await interaktService.sendTicketForOrder(order.order_id);
     } catch (err) {

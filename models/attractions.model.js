@@ -7,7 +7,9 @@ async function createAttraction(payload) {
     slug = null,
     description = null,
     image_url = null,
+    image_alt = null,
     desktop_image_url = null,
+    desktop_image_alt = null,
     gallery = [],
     base_price = 0,
     price_per_hour = 0,
@@ -22,15 +24,17 @@ async function createAttraction(payload) {
 
   const { rows } = await pool.query(
     `INSERT INTO attractions
-     (title, slug, description, image_url, desktop_image_url, gallery, base_price, price_per_hour, discount_percent, active, badge, video_url, slot_capacity, meta_title, short_description)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+     (title, slug, description, image_url, image_alt, desktop_image_url, desktop_image_alt, gallery, base_price, price_per_hour, discount_percent, active, badge, video_url, slot_capacity, meta_title, short_description)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17)
      RETURNING *`,
     [
       title,
       slug,
       description,
       image_url,
+      image_alt,
       desktop_image_url,
+      desktop_image_alt,
       JSON.stringify(gallery || []),
       base_price,
       price_per_hour,

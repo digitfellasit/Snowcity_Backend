@@ -11,6 +11,7 @@ function mapOffer(row) {
     title: row.title,
     description: row.description,
     image_url: row.image_url,
+    image_alt: row.image_alt,
     rule_type: row.rule_type,
     discount_percent: row.discount_percent,
     discount_type: row.discount_type || 'percent',
@@ -133,6 +134,7 @@ async function createOffer(payload = {}) {
     title,
     description = null,
     image_url = null,
+    image_alt = null,
     rule_type = null,
     discount_type = 'percent',
     discount_value = 0,
@@ -148,6 +150,7 @@ async function createOffer(payload = {}) {
         title,
         description,
         image_url,
+        image_alt,
         rule_type,
         discount_type,
         discount_value,
@@ -156,12 +159,13 @@ async function createOffer(payload = {}) {
         valid_to,
         active
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9::date, $10)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10::date, $11)
       RETURNING *`,
     [
       title,
       description,
       image_url,
+      image_alt,
       rule_type,
       discount_type,
       discount_value,
@@ -482,7 +486,7 @@ async function findOfferSlots(offer_id, { limit = 500 } = {}) {
             ? await comboSlotsModel.getSlotById(slot_id)
             : await attractionSlotsModel.getSlotById(slot_id);
         if (slot) add(slot, { type: slot_type, offer_id, rule_id: rule.rule_id });
-      } catch {}
+      } catch { }
       continue;
     }
 

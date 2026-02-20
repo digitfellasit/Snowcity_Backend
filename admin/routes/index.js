@@ -37,6 +37,7 @@ router.use('/pages', require('./pages.routes'));
 router.use('/blogs', require('./blogs.routes'));
 router.use('/gallery', require('./gallery.routes'));
 router.use('/analytics', require('./analytics.routes'));
+router.use('/conversion', require('./conversion.routes'));
 router.use('/uploads', require('./uploads.routes'));
 router.use('/dynamic-pricing', require('./dynamicPricing.routes'));
 router.use('/attraction-date-prices', require('../../routes/attractionDatePrices.routes'));

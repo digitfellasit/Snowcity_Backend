@@ -56,6 +56,7 @@ function mapBlog(row) {
     raw_css: row.raw_css,
     raw_js: row.raw_js,
     image_url: row.image_url,
+    image_alt: row.image_alt,
     author: row.author,
     meta_title: row.meta_title,
     meta_description: row.meta_description,
@@ -70,13 +71,13 @@ function mapBlog(row) {
   };
 }
 
-async function createBlog({ title, slug, content = null, image_url = null, author = null, meta_title = null, meta_description = null, meta_keywords = null, section_type = 'none', section_ref_id = null, gallery = [], bulk_images = [], active = true, editor_mode = 'rich', raw_html = null, raw_css = null, raw_js = null }) {
+async function createBlog({ title, slug, content = null, image_url = null, image_alt = null, author = null, meta_title = null, meta_description = null, meta_keywords = null, section_type = 'none', section_ref_id = null, gallery = [], bulk_images = [], active = true, editor_mode = 'rich', raw_html = null, raw_css = null, raw_js = null }) {
   try {
     const { rows } = await pool.query(
-      `INSERT INTO blogs (title, slug, content, image_url, author, meta_title, meta_description, meta_keywords, section_type, section_ref_id, gallery, bulk_images, active, editor_mode, raw_html, raw_css, raw_js)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11, '[]'::jsonb), COALESCE($12, '[]'::jsonb), $13, $14, $15, $16, $17)
+      `INSERT INTO blogs (title, slug, content, image_url, image_alt, author, meta_title, meta_description, meta_keywords, section_type, section_ref_id, gallery, bulk_images, active, editor_mode, raw_html, raw_css, raw_js)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, '[]'::jsonb), COALESCE($13, '[]'::jsonb), $14, $15, $16, $17, $18)
        RETURNING *`,
-      [title, slug, content, image_url, author, meta_title, meta_description, meta_keywords, section_type, section_ref_id, Array.isArray(gallery) ? JSON.stringify(gallery) : gallery, Array.isArray(bulk_images) ? JSON.stringify(bulk_images) : bulk_images, active, editor_mode, raw_html, raw_css, raw_js]
+      [title, slug, content, image_url, image_alt, author, meta_title, meta_description, meta_keywords, section_type, section_ref_id, Array.isArray(gallery) ? JSON.stringify(gallery) : gallery, Array.isArray(bulk_images) ? JSON.stringify(bulk_images) : bulk_images, active, editor_mode, raw_html, raw_css, raw_js]
     );
     return mapBlog(rows[0]);
   } catch (err) {
@@ -158,7 +159,7 @@ async function updateBlog(blog_id, fields = {}) {
   } catch (err) {
     // Fallback: if raw/editor columns don't exist, retry without them
     if (err && (err.code === '42703' || /column\s+"?(editor_mode|raw_html|raw_css|raw_js|bulk_images)"?\s+does not exist/i.test(String(err.message)))) {
-      const filtered = entries.filter(([k]) => !['editor_mode','raw_html','raw_css','raw_js','bulk_images'].includes(k));
+      const filtered = entries.filter(([k]) => !['editor_mode', 'raw_html', 'raw_css', 'raw_js', 'bulk_images'].includes(k));
       if (!filtered.length) return getBlogById(blog_id);
       const sets2 = [];
       const params2 = [];

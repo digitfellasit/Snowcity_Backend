@@ -2,6 +2,7 @@
 
 const bookingsModel = require('../../models/bookings.model');
 const bookingService = require('../../services/bookingService');
+const ticketService = require('../../services/ticketService');
 
 const me = (req) => req.user?.id || req.user?.user_id || null;
 
@@ -309,4 +310,33 @@ exports.checkPhonePeStatus = async (req, res, next) => {
     if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
   }
+};
+
+// Download Ticket PDF (generated on-the-fly, never stored)
+exports.downloadTicket = async (req, res, next) => {
+  try {
+    const userId = me(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const id = toInt(req.params.id, null);
+    if (!isPosInt(id)) return res.status(400).json({ error: 'Invalid Booking ID' });
+
+    // Verify ownership
+    const booking = await bookingsModel.getBookingById(id);
+    if (!booking || booking.user_id !== userId) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    if (booking.payment_status !== 'Completed') {
+      return res.status(400).json({ error: 'Payment not completed' });
+    }
+
+    // Generate PDF buffer on-the-fly
+    const { buffer, filename } = await ticketService.generateTicketBuffer(id);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  } catch (err) { next(err); }
 };
