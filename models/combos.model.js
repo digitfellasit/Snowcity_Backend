@@ -23,6 +23,10 @@ function mapCombo(row) {
     meta_title: row.meta_title,
     short_description: row.short_description,
     description: row.description,
+    faq_items: row.faq_items || [],
+    head_schema: row.head_schema,
+    body_schema: row.body_schema,
+    footer_schema: row.footer_schema,
     // Legacy fields for backward compatibility
     attraction_1_id: row.attraction_1_id,
     attraction_2_id: row.attraction_2_id,
@@ -48,7 +52,11 @@ async function createCombo({
   active = true,
   meta_title = null,
   short_description = null,
-  description = null
+  description = null,
+  faq_items = [],
+  head_schema = null,
+  body_schema = null,
+  footer_schema = null
 }) {
   const client = await pool.connect();
   try {
@@ -59,10 +67,10 @@ async function createCombo({
 
     // Insert combo
     const { rows } = await client.query(
-      `INSERT INTO combos (name, slug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, create_slots, meta_title, short_description, description)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, $12, $13, $14)
+      `INSERT INTO combos (name, slug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, create_slots, meta_title, short_description, description, faq_items, head_schema, body_schema, footer_schema)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, $12, $13, $14, $15::jsonb, $16, $17, $18)
        RETURNING *`,
-      [name, finalSlug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, meta_title, short_description, description]
+      [name, finalSlug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, meta_title, short_description, description, JSON.stringify(faq_items || []), head_schema, body_schema, footer_schema]
     );
 
     const combo = mapCombo(rows[0]);
@@ -84,12 +92,12 @@ async function createCombo({
 
     await client.query('COMMIT');
 
-    // Always create slots automatically for new combos
-    console.log('Creating automatic slots for new combo:', combo.combo_id, 'with', attraction_ids?.length, 'attractions');
+    // Always create slots automatically for new combos but in background
+    console.log('Backgrounding automatic slots for new combo:', combo.combo_id, 'with', attraction_ids?.length, 'attractions');
     const defaultSlots = ComboSlotAutoService.generateDefaultSlots(attraction_ids.length);
-    console.log('Generated default slots count:', defaultSlots.length);
-    await ComboSlotAutoService.generateSlotsForCombo(combo.combo_id, defaultSlots);
-    console.log('Slot generation completed for combo:', combo.combo_id);
+    ComboSlotAutoService.generateSlotsForCombo(combo.combo_id, defaultSlots)
+      .then(() => console.log('Slot generation completed in background for combo:', combo.combo_id))
+      .catch(err => console.error('Background slot generation failed for combo:', combo.combo_id, err));
 
     return combo;
   } catch (error) {
@@ -154,8 +162,13 @@ async function updateCombo(combo_id, fields = {}) {
       const sets = [];
       const params = [];
       entries.forEach(([k, v], idx) => {
-        sets.push(`${k} = $${idx + 1}`);
-        params.push(v);
+        if (k === 'faq_items') {
+          sets.push(`${k} = $${idx + 1}::jsonb`);
+          params.push(JSON.stringify(v || []));
+        } else {
+          sets.push(`${k} = $${idx + 1}`);
+          params.push(v);
+        }
       });
       params.push(combo_id);
 

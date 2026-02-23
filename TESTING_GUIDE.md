@@ -24,13 +24,13 @@ cd backend
 npx nodemon server.js
 ```
 
-The server should start on `https://snowcity-backend-zjlj.onrender.com` (or the PORT specified in your `.env` file).
+The server should start on `https://snowpark.netlify.app` (or the PORT specified in your `.env` file).
 
 ## 🧪 Testing the OTP Endpoint
 
 ### 1. Check Server Health
 ```bash
-curl https://snowcity-backend-zjlj.onrender.com/health
+curl https://snowpark.netlify.app/health
 ```
 
 Expected response:
@@ -44,7 +44,7 @@ Expected response:
 
 ### 2. Send OTP (Create User)
 ```bash
-curl -X POST https://snowcity-backend-zjlj.onrender.com/api/auth/otp/send \
+curl -X POST https://snowpark.netlify.app/api/auth/otp/send \
   -H "Content-Type: application/json" \
   -d '{
     "email": "test@example.com",
@@ -66,7 +66,7 @@ Expected response:
 
 ### 3. Verify OTP
 ```bash
-curl -X POST https://snowcity-backend-zjlj.onrender.com/api/auth/otp/verify \
+curl -X POST https://snowpark.netlify.app/api/auth/otp/verify \
   -H "Content-Type: application/json" \
   -d '{
     "otp": "123456",
@@ -95,7 +95,7 @@ Expected response:
 ### Using fetch in browser console:
 ```javascript
 // Send OTP
-fetch('https://snowcity-backend-zjlj.onrender.com/api/auth/otp/send', {
+fetch('https://snowpark.netlify.app/api/auth/otp/send', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -117,7 +117,7 @@ fetch('https://snowcity-backend-zjlj.onrender.com/api/auth/otp/send', {
 ```javascript
 import axios from 'axios';
 
-axios.post('https://snowcity-backend-zjlj.onrender.com/api/auth/otp/send', {
+axios.post('https://snowpark.netlify.app/api/auth/otp/send', {
   email: 'test@example.com',
   phone: '+1234567890',
   name: 'Test User',
@@ -133,7 +133,7 @@ axios.post('https://snowcity-backend-zjlj.onrender.com/api/auth/otp/send', {
 ### Error: "Not Found" (404)
 - ✅ **Fixed**: The route is now properly registered
 - Make sure the server is running
-- Check that you're using the correct URL: `https://snowcity-backend-zjlj.onrender.com/api/auth/otp/send`
+- Check that you're using the correct URL: `https://snowpark.netlify.app/api/auth/otp/send`
 
 ### Error: "password_hash violates not-null constraint"
 - ✅ **Fixed**: Database migration has been applied

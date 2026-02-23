@@ -6,6 +6,7 @@ const http = require('http');
 const app = require('./app');
 const logger = require('./config/logger');
 const { pool } = require('./config/db');
+const initService = require('./services/initService');
 
 const PORT = process.env.PORT || 4000;
 
@@ -33,11 +34,18 @@ async function start() {
         poolMax,
         timezone: r.tz || 'UTC',
       });
+
+      // Initialize system with Super Admin and Permissions
+      await initService.initializeSystem();
     } finally {
       client.release();
     }
   } catch (err) {
-    logger.error('Failed to connect to PostgreSQL', { err: err.message });
+    if (typeof logger !== 'undefined' && logger.error) {
+      logger.error('Failed to connect to PostgreSQL', { err: err.message });
+    } else {
+      console.error('Failed to connect to PostgreSQL:', err.message);
+    }
     process.exit(1);
   }
 

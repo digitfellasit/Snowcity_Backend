@@ -46,6 +46,17 @@ function mapBlog(row) {
       };
     });
   }
+  // Normalize JSONB SEO fields
+  let faq_items = row.faq_items;
+  if (typeof faq_items === 'string') { try { faq_items = JSON.parse(faq_items); } catch { faq_items = []; } }
+  if (!Array.isArray(faq_items)) faq_items = [];
+  let head_schema = row.head_schema;
+  if (typeof head_schema === 'string') { try { head_schema = JSON.parse(head_schema); } catch { head_schema = {}; } }
+  let body_schema = row.body_schema;
+  if (typeof body_schema === 'string') { try { body_schema = JSON.parse(body_schema); } catch { body_schema = {}; } }
+  let footer_schema = row.footer_schema;
+  if (typeof footer_schema === 'string') { try { footer_schema = JSON.parse(footer_schema); } catch { footer_schema = {}; } }
+
   return {
     blog_id: row.blog_id,
     title: row.title,
@@ -65,19 +76,27 @@ function mapBlog(row) {
     section_ref_id: row.section_ref_id,
     gallery,
     bulk_images,
+    faq_items,
+    head_schema,
+    body_schema,
+    footer_schema,
     active: row.active,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
 }
 
-async function createBlog({ title, slug, content = null, image_url = null, image_alt = null, author = null, meta_title = null, meta_description = null, meta_keywords = null, section_type = 'none', section_ref_id = null, gallery = [], bulk_images = [], active = true, editor_mode = 'rich', raw_html = null, raw_css = null, raw_js = null }) {
+async function createBlog({ title, slug, content = null, image_url = null, image_alt = null, author = null, meta_title = null, meta_description = null, meta_keywords = null, section_type = 'none', section_ref_id = null, gallery = [], bulk_images = [], active = true, editor_mode = 'rich', raw_html = null, raw_css = null, raw_js = null, faq_items = [], head_schema = {}, body_schema = {}, footer_schema = {} }) {
   try {
+    const faqPayload = Array.isArray(faq_items) ? JSON.stringify(faq_items) : (faq_items || '[]');
+    const headSchemaPayload = typeof head_schema === 'object' ? JSON.stringify(head_schema) : (head_schema || '{}');
+    const bodySchemaPayload = typeof body_schema === 'object' ? JSON.stringify(body_schema) : (body_schema || '{}');
+    const footerSchemaPayload = typeof footer_schema === 'object' ? JSON.stringify(footer_schema) : (footer_schema || '{}');
     const { rows } = await pool.query(
-      `INSERT INTO blogs (title, slug, content, image_url, image_alt, author, meta_title, meta_description, meta_keywords, section_type, section_ref_id, gallery, bulk_images, active, editor_mode, raw_html, raw_css, raw_js)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, '[]'::jsonb), COALESCE($13, '[]'::jsonb), $14, $15, $16, $17, $18)
+      `INSERT INTO blogs (title, slug, content, image_url, image_alt, author, meta_title, meta_description, meta_keywords, section_type, section_ref_id, gallery, bulk_images, active, editor_mode, raw_html, raw_css, raw_js, faq_items, head_schema, body_schema, footer_schema)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, '[]'::jsonb), COALESCE($13, '[]'::jsonb), $14, $15, $16, $17, $18, COALESCE($19, '[]'::jsonb), COALESCE($20, '{}'::jsonb), COALESCE($21, '{}'::jsonb), COALESCE($22, '{}'::jsonb))
        RETURNING *`,
-      [title, slug, content, image_url, image_alt, author, meta_title, meta_description, meta_keywords, section_type, section_ref_id, Array.isArray(gallery) ? JSON.stringify(gallery) : gallery, Array.isArray(bulk_images) ? JSON.stringify(bulk_images) : bulk_images, active, editor_mode, raw_html, raw_css, raw_js]
+      [title, slug, content, image_url, image_alt, author, meta_title, meta_description, meta_keywords, section_type, section_ref_id, Array.isArray(gallery) ? JSON.stringify(gallery) : gallery, Array.isArray(bulk_images) ? JSON.stringify(bulk_images) : bulk_images, active, editor_mode, raw_html, raw_css, raw_js, faqPayload, headSchemaPayload, bodySchemaPayload, footerSchemaPayload]
     );
     return mapBlog(rows[0]);
   } catch (err) {

@@ -51,6 +51,9 @@ const webhookRoutes = require('./routes/webhooks.routes');
 app.use('/api', apiRoutes);
 app.use('/webhooks', webhookRoutes);
 
+// SSR routes for SEO crawlers (full HTML rendering)
+app.use('/', require('./routes/ssr.routes'));
+
 // Echo endpoint
 app.post('/_echo', (req, res) => {
   res.json({ body: req.body, headers: req.headers });
@@ -65,10 +68,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Placeholder root
-app.get('/', (req, res) => {
-  res.json({ name: 'SnowCity API', version: '1.0.0' });
-});
+
 
 // 404
 app.use((req, res, next) => {
@@ -99,7 +99,7 @@ const { pool } = require('./config/db');
 cron.schedule('*/15 * * * *', async () => {
   try {
     console.log('Running cleanup: Abandoned Pending Orders...');
-    
+
     // Delete orders pending for more than 20 minutes
     // Cascading delete will remove associated bookings and booking_addons
     const res = await pool.query(
@@ -107,9 +107,9 @@ cron.schedule('*/15 * * * *', async () => {
        WHERE payment_status = 'Pending' 
        AND created_at < NOW() - INTERVAL '20 minutes'`
     );
-    
+
     if (res.rowCount > 0) {
-        console.log(`Cleanup: Removed ${res.rowCount} abandoned orders.`);
+      console.log(`Cleanup: Removed ${res.rowCount} abandoned orders.`);
     }
   } catch (err) {
     console.error('Cleanup Error:', err);

@@ -170,6 +170,10 @@ exports.createPage = async (req, res, next) => {
       nav_order: Number.isFinite(p.nav_order) ? Number(p.nav_order) : 0,
       placement: p.placement || 'none',               // 'none'|'home_bottom'|'attraction_details'
       placement_ref_id: p.placement_ref_id || null,   // attraction id if placement is attraction_details
+      faq_items: Array.isArray(p.faq_items) ? p.faq_items : [],
+      head_schema: p.head_schema || {},
+      body_schema: p.body_schema || {},
+      footer_schema: p.footer_schema || {},
     };
 
     const row = await pagesModel.createPage(payload);
@@ -212,6 +216,10 @@ exports.updatePage = async (req, res, next) => {
       nav_order: Number.isFinite(p.nav_order) ? Number(p.nav_order) : undefined,
       placement: p.placement,
       placement_ref_id: p.placement_ref_id,
+      faq_items: Array.isArray(p.faq_items) ? p.faq_items : undefined,
+      head_schema: p.head_schema,
+      body_schema: p.body_schema,
+      footer_schema: p.footer_schema,
     };
     const row = await pagesModel.updatePage(id, payload);
     if (!row) return res.status(404).json({ error: 'Page not found' });
@@ -254,6 +262,10 @@ exports.previewPage = async (req, res, next) => {
       raw_html: p.raw_html || '',
       raw_css: p.raw_css || '',
       raw_js: p.raw_js || '',
+      faq_items: Array.isArray(p.faq_items) ? p.faq_items : [],
+      head_schema: p.head_schema || {},
+      body_schema: p.body_schema || {},
+      footer_schema: p.footer_schema || {},
       preview: true,
     };
     res.json(out);

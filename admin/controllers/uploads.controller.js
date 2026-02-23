@@ -69,6 +69,7 @@ exports.uploadSingleImage = async (req, res, next) => {
     return res.status(201).json({
       media_id: media?.media_id,
       url: result.urlPath,
+      url_path: result.urlPath,
       path: result.relativePath,
       filename: result.filename,
       size: result.size,
@@ -115,6 +116,7 @@ exports.uploadBulkImages = async (req, res, next) => {
         results.push({
           media_id: media?.media_id,
           url: result.urlPath,
+          url_path: result.urlPath,
           path: result.relativePath,
           filename: result.filename,
           size: result.size,

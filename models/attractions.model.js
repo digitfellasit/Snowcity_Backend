@@ -20,12 +20,16 @@ async function createAttraction(payload) {
     slot_capacity = 0,
     meta_title = null,
     short_description = null,
+    faq_items = [],
+    head_schema = null,
+    body_schema = null,
+    footer_schema = null,
   } = payload;
 
   const { rows } = await pool.query(
     `INSERT INTO attractions
-     (title, slug, description, image_url, image_alt, desktop_image_url, desktop_image_alt, gallery, base_price, price_per_hour, discount_percent, active, badge, video_url, slot_capacity, meta_title, short_description)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+     (title, slug, description, image_url, image_alt, desktop_image_url, desktop_image_alt, gallery, base_price, price_per_hour, discount_percent, active, badge, video_url, slot_capacity, meta_title, short_description, faq_items, head_schema, body_schema, footer_schema)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19, $20, $21)
      RETURNING *`,
     [
       title,
@@ -45,17 +49,21 @@ async function createAttraction(payload) {
       slot_capacity,
       meta_title,
       short_description,
+      JSON.stringify(faq_items || []),
+      head_schema,
+      body_schema,
+      footer_schema,
     ]
   );
 
   const attraction = rows[0];
 
-  // Always create slots automatically for new attractions
-  console.log('Creating automatic slots for new attraction:', attraction.attraction_id);
+  // Always create slots automatically for new attractions but in background
+  console.log('Backgrounding automatic slots for new attraction:', attraction.attraction_id);
   const defaultSlots = AttractionSlotAutoService.generateDefaultSlots(1); // 1-hour slots for attractions
-  console.log('Generated default slots count:', defaultSlots.length);
-  await AttractionSlotAutoService.generateSlotsForAttraction(attraction.attraction_id, defaultSlots);
-  console.log('Slot generation completed for attraction:', attraction.attraction_id);
+  AttractionSlotAutoService.generateSlotsForAttraction(attraction.attraction_id, defaultSlots)
+    .then(() => console.log('Slot generation completed in background for attraction:', attraction.attraction_id))
+    .catch(err => console.error('Background slot generation failed for attraction:', attraction.attraction_id, err));
 
   return attraction;
 }
@@ -104,13 +112,14 @@ async function listAttractions({ search = '', active = null, limit = 50, offset 
 
 async function updateAttraction(attraction_id, fields = {}) {
   if (fields.gallery) fields.gallery = JSON.stringify(fields.gallery);
+  if (fields.faq_items) fields.faq_items = JSON.stringify(fields.faq_items);
   const entries = Object.entries(fields).filter(([, v]) => v !== undefined);
   if (!entries.length) return getAttractionById(attraction_id);
 
   const sets = [];
   const params = [];
   entries.forEach(([k, v], idx) => {
-    const col = k === 'gallery' ? `${k} = $${idx + 1}::jsonb` : `${k} = $${idx + 1}`;
+    const col = (k === 'gallery' || k === 'faq_items') ? `${k} = $${idx + 1}::jsonb` : `${k} = $${idx + 1}`;
     sets.push(col);
     params.push(v);
   });

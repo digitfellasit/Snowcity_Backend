@@ -32,9 +32,9 @@ const API_PREFIX = ENV === 'sandbox' ? '/apis/pg-sandbox' : '/apis/hermes';
 function normalizeBaseUrl(raw, fallback) {
   const input = typeof raw === 'string' ? raw : '';
   const parts = input.split(',').map(v => v.trim()).filter(Boolean);
-  return (parts[0] || fallback || 'https://snowcity-backend-zjlj.onrender.com').replace(/\/+$/, '');
+  return (parts[0] || fallback || 'https://snowpark.netlify.app').replace(/\/+$/, '');
 }
-const APP_URL = normalizeBaseUrl(process.env.APP_URL, 'https://snowcity-backend-zjlj.onrender.com');
+const APP_URL = normalizeBaseUrl(process.env.APP_URL, 'https://snowpark.netlify.app');
 const CLIENT_URL = (process.env.CLIENT_URL || 'https://snowpark.netlify.app').replace(/\/+$/, '');
 
 // Callback / redirect URLs

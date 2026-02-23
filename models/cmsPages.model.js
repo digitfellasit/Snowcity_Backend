@@ -30,12 +30,24 @@ function normalizeBulkImages(value) {
 
 function mapPage(row) {
   if (!row) return null;
+  // Normalize JSONB SEO fields
+  let faq_items = row.faq_items;
+  if (typeof faq_items === 'string') { try { faq_items = JSON.parse(faq_items); } catch { faq_items = []; } }
+  if (!Array.isArray(faq_items)) faq_items = [];
+  let head_schema = row.head_schema;
+  if (typeof head_schema === 'string') { try { head_schema = JSON.parse(head_schema); } catch { head_schema = {}; } }
+  let body_schema = row.body_schema;
+  if (typeof body_schema === 'string') { try { body_schema = JSON.parse(body_schema); } catch { body_schema = {}; } }
+  let footer_schema = row.footer_schema;
+  if (typeof footer_schema === 'string') { try { footer_schema = JSON.parse(footer_schema); } catch { footer_schema = {}; } }
+
   return {
     page_id: row.page_id,
     title: row.title,
     slug: row.slug,
     content: row.content,
     image_url: row.image_url || row.hero_image || null,
+    image_alt: row.image_alt || row.hero_image_alt || null,
     meta_title: row.meta_title,
     meta_description: row.meta_description,
     meta_keywords: row.meta_keywords,
@@ -51,6 +63,10 @@ function mapPage(row) {
     nav_order: Number.isFinite(row.nav_order) ? Number(row.nav_order) : 0,
     placement: row.placement || 'none',
     placement_ref_id: row.placement_ref_id,
+    faq_items,
+    head_schema,
+    body_schema,
+    footer_schema,
     active: row.active,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -63,6 +79,8 @@ async function createPage({
   content,
   image_url = null,
   hero_image = null,
+  image_alt = null,
+  hero_image_alt = null,
   meta_title = null,
   meta_description = null,
   meta_keywords = null,
@@ -78,27 +96,38 @@ async function createPage({
   nav_group = null,
   nav_order = 0,
   placement = 'none',
+  faq_items = [],
+  head_schema = {},
+  body_schema = {},
+  footer_schema = {},
   placement_ref_id = null,
 }) {
   const hero = hero_image || image_url || null;
+  const heroAlt = hero_image_alt || image_alt || null;
   const galleryPayload = Array.isArray(gallery) ? JSON.stringify(gallery) : gallery;
   const bulkImagesPayload = Array.isArray(bulk_images) ? JSON.stringify(bulk_images) : bulk_images;
   const navOrder = Number.isFinite(Number(nav_order)) ? Number(nav_order) : 0;
+  const faqPayload = Array.isArray(faq_items) ? JSON.stringify(faq_items) : (faq_items || '[]');
+  const headSchemaPayload = typeof head_schema === 'object' ? JSON.stringify(head_schema) : (head_schema || '{}');
+  const bodySchemaPayload = typeof body_schema === 'object' ? JSON.stringify(body_schema) : (body_schema || '{}');
+  const footerSchemaPayload = typeof footer_schema === 'object' ? JSON.stringify(footer_schema) : (footer_schema || '{}');
   try {
     const { rows } = await pool.query(
       `INSERT INTO cms_pages (
-        title, slug, content, hero_image,
+        title, slug, content, hero_image, hero_image_alt,
         meta_title, meta_description, meta_keywords,
         section_type, section_ref_id, gallery, bulk_images, active,
         nav_group, nav_order, placement, placement_ref_id,
-        editor_mode, raw_html, raw_css, raw_js
+        editor_mode, raw_html, raw_css, raw_js,
+        faq_items, head_schema, body_schema, footer_schema
       )
        VALUES (
-        $1, $2, $3, $4,
+        $1, $2, $3, $4, $25,
         $5, $6, $7,
         $8, $9, COALESCE($10, '[]'::jsonb), COALESCE($11, '[]'::jsonb), $12,
         $13, $14, $15, $16,
-        $17, $18, $19, $20
+        $17, $18, $19, $20,
+        COALESCE($21, '[]'::jsonb), COALESCE($22, '{}'::jsonb), COALESCE($23, '{}'::jsonb), COALESCE($24, '{}'::jsonb)
       )
        RETURNING *`,
       [
@@ -122,6 +151,11 @@ async function createPage({
         raw_html,
         raw_css,
         raw_js,
+        faqPayload,
+        headSchemaPayload,
+        bodySchemaPayload,
+        footerSchemaPayload,
+        heroAlt,
       ]
     );
     return mapPage(rows[0]);
@@ -207,9 +241,10 @@ async function updatePage(page_id, fields = {}) {
   // Whitelist allowed columns to avoid "column does not exist" errors
   const allowed = new Set([
     'title', 'slug', 'content', 'meta_title', 'meta_description', 'meta_keywords',
-    'section_type', 'section_ref_id', 'gallery', 'bulk_images', 'active', 'hero_image',
+    'section_type', 'section_ref_id', 'gallery', 'bulk_images', 'active', 'hero_image', 'hero_image_alt',
     'nav_group', 'nav_order', 'placement', 'placement_ref_id',
-    'editor_mode', 'raw_html', 'raw_css', 'raw_js'
+    'editor_mode', 'raw_html', 'raw_css', 'raw_js',
+    'faq_items', 'head_schema', 'body_schema', 'footer_schema'
   ]);
 
   const entries = Object.entries(input).filter(([k, v]) => allowed.has(k) && v !== undefined);
@@ -219,7 +254,10 @@ async function updatePage(page_id, fields = {}) {
   const params = [];
   entries.forEach(([k, v]) => {
     let val = v;
-    if ((k === 'gallery' || k === 'bulk_images') && Array.isArray(val)) {
+    if ((k === 'gallery' || k === 'bulk_images' || k === 'faq_items') && Array.isArray(val)) {
+      val = JSON.stringify(val);
+    }
+    if ((k === 'head_schema' || k === 'body_schema' || k === 'footer_schema') && typeof val === 'object' && val !== null) {
       val = JSON.stringify(val);
     }
     sets.push(`${k} = $${params.length + 1}`);

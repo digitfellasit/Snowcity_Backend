@@ -1,7 +1,7 @@
 require('dotenv').config();
 const axios = require('axios');
 
-const API_BASE = process.env.VITE_ADMIN_API_BASE_URL || 'https://snowcity-backend-zjlj.onrender.com';
+const API_BASE = process.env.VITE_ADMIN_API_BASE_URL || 'https://snowpark.netlify.app';
 
 async function testAttractionSlotsAPI() {
   console.log('Testing attraction slots API endpoints...');

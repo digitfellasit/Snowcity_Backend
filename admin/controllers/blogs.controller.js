@@ -75,6 +75,10 @@ async function createBlog(req, res, next) {
       raw_html: p.raw_html || null,
       raw_css: p.raw_css || null,
       raw_js: p.raw_js || null,
+      faq_items: Array.isArray(p.faq_items) ? p.faq_items : [],
+      head_schema: p.head_schema || {},
+      body_schema: p.body_schema || {},
+      footer_schema: p.footer_schema || {},
     };
     const row = await blogService.createBlog(payload);
     res.status(201).json(row);
@@ -111,6 +115,10 @@ async function updateBlog(req, res, next) {
       raw_html: p.raw_html,
       raw_css: p.raw_css,
       raw_js: p.raw_js,
+      faq_items: Array.isArray(p.faq_items) ? p.faq_items : undefined,
+      head_schema: p.head_schema,
+      body_schema: p.body_schema,
+      footer_schema: p.footer_schema,
     };
     const row = await blogService.updateBlog(id, payload);
     if (!row) return res.status(404).json({ error: 'Blog not found' });
@@ -159,6 +167,10 @@ async function previewBlog(req, res, next) {
       raw_html: p.raw_html || '',
       raw_css: p.raw_css || '',
       raw_js: p.raw_js || '',
+      faq_items: Array.isArray(p.faq_items) ? p.faq_items : [],
+      head_schema: p.head_schema || {},
+      body_schema: p.body_schema || {},
+      footer_schema: p.footer_schema || {},
       preview: true,
     };
     res.json(out);

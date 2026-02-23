@@ -28,7 +28,9 @@ router.use('/', require('./gallery.public'));
 router.use('/', require('./pages.public'));
 router.use('/', require('./blogs.public'));
 router.use('/track', require('./tracking.routes'));
+router.use('/site-settings', require('./siteSettings.routes'));
 router.use('/payments', require('./payments.routes'));
+router.use('/resolve-slug', require('./resolveSlug.routes'));
 router.use('/webhooks', require('./webhooks.routes'));
 
 // Admin auth routes (public - no authentication required)

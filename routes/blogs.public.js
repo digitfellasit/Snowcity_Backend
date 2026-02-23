@@ -13,7 +13,7 @@ router.get('/blogs', async (req, res, next) => {
     if (q) { params.push(`%${q}%`); where.push(`(b.title ILIKE $${params.length} OR b.slug ILIKE $${params.length})`); }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const { rows } = await pool.query(
-      `SELECT blog_id, title, slug, image_url, author, created_at
+      `SELECT blog_id, title, slug, image_url, author, short_description, content, section_type, created_at
        FROM blogs b
        ${whereSql}
        ORDER BY created_at DESC
@@ -30,9 +30,10 @@ router.get('/blogs/slug/:slug', async (req, res, next) => {
     if (!slug) return res.status(400).json({ error: 'slug required' });
     const { rows } = await pool.query(
       `SELECT
-         blog_id, title, slug, active, image_url, author,
+         blog_id, title, slug, active, image_url, image_alt, author,
          editor_mode, content, raw_html, raw_css, raw_js,
          meta_title, meta_description, meta_keywords,
+         faq_items, head_schema, body_schema, footer_schema,
          created_at, updated_at
        FROM blogs
        WHERE active = TRUE AND LOWER(slug) = LOWER($1)

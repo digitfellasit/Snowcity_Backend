@@ -14,6 +14,7 @@ router.get('/pages/slug/:slug', async (req, res, next) => {
          editor_mode, content, raw_html, raw_css, raw_js,
          meta_title, meta_description, meta_keywords,
          nav_group, nav_order, placement, placement_ref_id,
+         faq_items, head_schema, body_schema, footer_schema,
          created_at, updated_at
        FROM cms_pages
        WHERE active = TRUE AND LOWER(slug) = LOWER($1)

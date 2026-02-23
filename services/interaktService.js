@@ -71,7 +71,7 @@ function formatSlotRange(row) {
 }
 
 function resolveMediaUrl(ticketPath) {
-  const base = FIXED_APP_URL || 'https://snowcity-backend-zjlj.onrender.com';
+  const base = FIXED_APP_URL || 'https://snowpark.netlify.app';
   if (!ticketPath) return null;
   if (/^https?:/i.test(ticketPath)) return ticketPath;
   return `${base.replace(/\/$/, '')}${String(ticketPath).startsWith('/') ? '' : '/'}${ticketPath}`;
