@@ -74,7 +74,14 @@ function resolveMediaUrl(ticketPath) {
   const base = FIXED_APP_URL || 'https://app.snowcityblr.com';
   if (!ticketPath) return null;
   if (/^https?:/i.test(ticketPath)) return ticketPath;
-  return `${base.replace(/\/$/, '')}${String(ticketPath).startsWith('/') ? '' : '/'}${ticketPath}`;
+
+  // Ensure we don't end up with app.snowcityblr.com//uploads
+  const cleanBase = base.replace(/\/$/, '');
+  const cleanPath = String(ticketPath).startsWith('/') ? ticketPath : `/${ticketPath}`;
+
+  const finalUrl = `${cleanBase}${cleanPath}`;
+  console.log('[Interakt] Resolved Media URL:', finalUrl);
+  return finalUrl;
 }
 
 function normalizePhone(p) {
@@ -241,7 +248,7 @@ async function sendTicketForOrder(orderId, { skipConsentCheck = false, force = f
     template: {
       name: 'ticket_confirmation_pdf_js',
       languageCode: 'en',
-      ...(mediaUrl ? { headerValues: [mediaUrl], fileName } : {}),
+      headerValues: mediaUrl ? [mediaUrl] : [],
       bodyValues: [
         data.user_name || 'Guest',
         data.itemsText || 'Booking confirmed',
@@ -249,6 +256,11 @@ async function sendTicketForOrder(orderId, { skipConsentCheck = false, force = f
       ]
     }
   };
+
+  // For media templates, fileName goes inside the template object but sometimes Interakt expects it in specific places
+  if (mediaUrl && fileName) {
+    payload.template.fileName = fileName;
+  }
 
   console.log('Interakt order template send payload:', JSON.stringify(payload, null, 2));
 
