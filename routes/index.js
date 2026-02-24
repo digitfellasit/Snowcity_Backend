@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const { defaultLimiter } = require('../middlewares/rateLimiter');
+const { cachePublic } = require('../middlewares/cacheMiddleware');
 
 // Global rate limiter for public API
 router.use(defaultLimiter);
@@ -10,18 +11,18 @@ router.use(defaultLimiter);
 router.use('/auth', require('./auth.routes'));
 router.use('/user', require('../user/routes'));
 router.use('/users', require('./users.routes'));
-router.use('/attractions', require('./attractions.routes'));
+router.use('/attractions', cachePublic(300), require('./attractions.routes'));      // 5 min
 router.use('/slots', require('./slots.routes'));
 router.use('/bookings', require('./bookings.routes'));
-router.use('/addons', require('./addons.routes'));
-router.use('/combos', require('./combos.routes'));
+router.use('/addons', cachePublic(300), require('./addons.routes'));                // 5 min
+router.use('/combos', cachePublic(300), require('./combos.routes'));                // 5 min
 router.use('/combo-slots', require('./comboSlots.routes'));
-router.use('/coupons', require('./coupons.routes'));
-router.use('/offers', require('./offers.routes'));
-router.use('/pages', require('./pages.routes'));
-router.use('/blogs', require('./blogs.routes'));
-router.use('/banners', require('../user/routes/banners.routes'));
-router.use('/uploads', require('./uploads.routes'));
+router.use('/coupons', cachePublic(300), require('./coupons.routes'));              // 5 min
+router.use('/offers', cachePublic(300), require('./offers.routes'));                // 5 min
+router.use('/pages', cachePublic(600), require('./pages.routes'));                  // 10 min
+router.use('/blogs', cachePublic(600), require('./blogs.routes'));                  // 10 min
+router.use('/banners', cachePublic(300), require('../user/routes/banners.routes')); // 5 min
+router.use('/uploads', cachePublic(3600), require('./uploads.routes'));             // 1 hr
 router.use('/tickets', require('./ticketsvirtual.routes'));
 router.use('/chatbot', require('./chatbot.routes'));
 router.use('/', require('./combos.public'));
@@ -29,9 +30,9 @@ router.use('/', require('./gallery.public'));
 router.use('/', require('./pages.public'));
 router.use('/', require('./blogs.public'));
 router.use('/track', require('./tracking.routes'));
-router.use('/site-settings', require('./siteSettings.routes'));
+router.use('/site-settings', cachePublic(1800), require('./siteSettings.routes')); // 30 min
 router.use('/payments', require('./payments.routes'));
-router.use('/resolve-slug', require('./resolveSlug.routes'));
+router.use('/resolve-slug', cachePublic(300), require('./resolveSlug.routes'));     // 5 min
 router.use('/webhooks', require('./webhooks.routes'));
 
 // Admin auth routes (public - no authentication required)

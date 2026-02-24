@@ -26,11 +26,12 @@ app.use(compression());
 app.use(hpp());
 app.use(cors(corsOptions)); // ← FIXED: BEFORE ROUTES!
 
-// Serve uploaded assets
+// Serve uploaded assets with aggressive caching (images rarely change)
 app.use(
   '/uploads',
   (req, res, next) => {
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     next();
   },
   express.static(path.resolve(__dirname, 'uploads'))
