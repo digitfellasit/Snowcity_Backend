@@ -1,13 +1,13 @@
 const DEFAULT_ORIGINS = [
-  'https://snowpark.netlify.app',
-  'https://snowpark.netlify.app',
-  'https://snowpark.netlify.app',
+  'https://app.snowcityblr.com',
+  'https://app.snowcityblr.com',
+  'https://app.snowcityblr.com',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:5174',
-  'https://snowpark.netlify.app',
-  'https://snowpark.netlify.app',
+  'https://app.snowcityblr.com',
+  'https://snowcity.vercel.app',
   'https://qa.phicommerce.com',
-  'https://snowpark.netlify.app'
+  'https://app.snowcityblr.com'
 ];
 
 const parseOrigins = () => {

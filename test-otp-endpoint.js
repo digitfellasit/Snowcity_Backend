@@ -5,7 +5,7 @@
 
 const http = require('http');
 
-const BASE_URL = 'https://snowpark.netlify.app';
+const BASE_URL = 'https://app.snowcityblr.com';
 
 function makeRequest(method, path, data = null) {
   return new Promise((resolve, reject) => {

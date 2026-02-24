@@ -59,7 +59,7 @@ require = function (id) {
   }
   if (id === '../config/messaging') {
     return {
-      APP_URL: 'https://snowpark.netlify.app',
+      APP_URL: 'https://app.snowcityblr.com',
       interakt: {
         apiUrl: 'https://api.interakt.ai/v1/public/message/',
         apiKey: 'test-key',

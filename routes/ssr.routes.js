@@ -31,7 +31,7 @@ async function loadSeoSettings() {
 
 // Determine client URL from env
 function getClientUrl() {
-    return process.env.CLIENT_URL || 'https://snowpark.netlify.app';
+    return process.env.CLIENT_URL || 'https://app.snowcityblr.com';
 }
 
 // ── SSR Preview (Admin) ──────────────────────────────────────────────────

@@ -3,6 +3,7 @@ const path = require('path');
 const email = require('./emailService');
 const bookingsModel = require('../models/bookings.model');
 const usersModel = require('../models/users.model');
+const ticketService = require('./ticketService');
 const { APP_URL } = require('../config/messaging');
 
 const TEMPLATE_PATH = path.join(__dirname, '..', 'templates', 'ticket_email.html');
@@ -39,11 +40,20 @@ function renderTicketTemplate(vars = {}) {
 }
 
 function absoluteFromUrlPath(urlPath) {
-  // urlPath like /uploads/tickets/YYYY/MM/DD/FILENAME.pdf
-  // files are stored at backend/uploads/... relative to __dirname/.. per ticketService
   if (!urlPath) return null;
   const rel = urlPath.replace(/^\/*/, '');
   return path.resolve(__dirname, '..', rel);
+}
+
+// Generate buffer for ticket instead of local disk read
+async function getTicketBufferForBooking(booking_id) {
+  try {
+    const { buffer, filename } = await ticketService.generateTicketBuffer(booking_id);
+    return { buffer, filename };
+  } catch (err) {
+    console.warn(`Failed to generate ticket buffer for booking ${booking_id}:`, err);
+    return null;
+  }
 }
 
 function formatMoney(n) {
@@ -171,13 +181,11 @@ async function sendTicketEmail(booking_id) {
   });
 
   const attachments = [];
-  if (b.ticket_pdf) {
-    const abs = absoluteFromUrlPath(b.ticket_pdf);
-    if (abs && fs.existsSync(abs)) {
-      attachments.push({ filename: path.basename(abs), path: abs, contentType: 'application/pdf' });
-    } else {
-      console.warn('Ticket PDF file not found for booking', booking_id, abs);
-    }
+  const ticketData = await getTicketBufferForBooking(booking_id);
+  if (ticketData && ticketData.buffer) {
+    attachments.push({ filename: ticketData.filename || `ticket_${b.booking_ref}.pdf`, content: ticketData.buffer, contentType: 'application/pdf' });
+  } else {
+    console.warn('Could not generate PDF attachment for booking', booking_id);
   }
 
   await email.send({ to, subject, text, html, attachments });
@@ -230,11 +238,13 @@ async function sendOrderEmail(order_id) {
   const attachments = [];
   const pdfPaths = new Set();
   for (const item of order.items || []) {
-    if (!item.ticket_pdf) continue;
-    const abs = absoluteFromUrlPath(item.ticket_pdf);
-    if (abs && !pdfPaths.has(abs) && fs.existsSync(abs)) {
-      pdfPaths.add(abs);
-      attachments.push({ filename: path.basename(abs), path: abs, contentType: 'application/pdf' });
+    if (!item.ticket_pdf && !item.booking_id) continue;
+
+    // Instead of reading the file path, simply fetch by booking ID
+    const ticketData = await getTicketBufferForBooking(item.booking_id);
+    if (ticketData && ticketData.buffer && !pdfPaths.has(item.booking_id)) {
+      pdfPaths.add(item.booking_id);
+      attachments.push({ filename: ticketData.filename || `ticket_${item.booking_ref}.pdf`, content: ticketData.buffer, contentType: 'application/pdf' });
     }
   }
 

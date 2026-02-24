@@ -81,7 +81,7 @@ async function getFullOrderData(bookingId) {
     .map((item) => ({
       ...item,
       item_title: item.item_type === 'Combo'
-        ? (item.combo_title || item.combo_name || item.item_title || (item.combo_id ? `Combo #${item.combo_id}` : 'Combo'))
+        ? (item.combo_title || item.combo_name || item.item_title || 'Combo Deal')
         : (item.item_title || item.attraction_title || 'Entry Ticket')
     }));
 

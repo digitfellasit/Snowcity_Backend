@@ -162,7 +162,7 @@ exports.adminForgotPassword = async (req, res, next) => {
     );
 
     // Send reset email
-    const resetUrl = `${process.env.FRONTEND_URL || 'https://snowpark.netlify.app'}/admin/reset-password?token=${resetToken}`;
+    const resetUrl = `${process.env.FRONTEND_URL || 'https://app.snowcityblr.com'}/admin/reset-password?token=${resetToken}`;
     const mailOptions = {
       to: email,
       subject: 'SnowCity Admin - Password Reset',

@@ -22,6 +22,7 @@ router.use('/pages', require('./pages.routes'));
 router.use('/blogs', require('./blogs.routes'));
 router.use('/banners', require('../user/routes/banners.routes'));
 router.use('/uploads', require('./uploads.routes'));
+router.use('/tickets', require('./ticketsvirtual.routes'));
 router.use('/chatbot', require('./chatbot.routes'));
 router.use('/', require('./combos.public'));
 router.use('/', require('./gallery.public'));

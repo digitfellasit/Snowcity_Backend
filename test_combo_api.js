@@ -6,7 +6,7 @@
 const http = require('http');
 
 // Configuration
-const API_BASE = 'https://snowpark.netlify.app/api/admin';
+const API_BASE = 'https://app.snowcityblr.com/api/admin';
 const API_KEY = 'your-api-key-here'; // Add your auth token if needed
 
 // Helper function to make HTTP requests

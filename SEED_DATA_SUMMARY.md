@@ -74,27 +74,27 @@ All images are from Unsplash and optimized for web:
 
 ### View Attractions
 ```bash
-GET https://snowpark.netlify.app/api/attractions
+GET https://app.snowcityblr.com/api/attractions
 ```
 
 ### View Slots
 ```bash
-GET https://snowpark.netlify.app/api/slots?attraction_id=1&date=2025-11-08
+GET https://app.snowcityblr.com/api/slots?attraction_id=1&date=2025-11-08
 ```
 
 ### View Combos
 ```bash
-GET https://snowpark.netlify.app/api/combos
+GET https://app.snowcityblr.com/api/combos
 ```
 
 ### View Banners
 ```bash
-GET https://snowpark.netlify.app/api/banners
+GET https://app.snowcityblr.com/api/banners
 ```
 
 ### View Offers
 ```bash
-GET https://snowpark.netlify.app/api/offers
+GET https://app.snowcityblr.com/api/offers
 ```
 
 ## 📝 Notes
