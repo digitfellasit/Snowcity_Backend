@@ -8,6 +8,7 @@ const fs = require('fs');
 
 const { pool } = require('../config/db');
 const bookingsModel = require('../models/bookings.model');
+const s3Service = require('./storage/s3Service');
 
 // ---------- Configuration ----------
 const ASSET_DIR = path.resolve(__dirname, '../utils');
@@ -299,11 +300,29 @@ async function generateTicketBuffer(booking_id) {
   };
 }
 
-// Legacy alias: generateTicket now returns buffer info instead of file path
+// Legacy alias: generateTicket now uploads to S3 and returns the public URL
 async function generateTicket(booking_id) {
-  const result = await generateTicketBuffer(booking_id);
-  // Return a virtual path for backward compatibility (no actual file stored)
-  return `/tickets/generated/${result.filename}`;
+  try {
+    const result = await generateTicketBuffer(booking_id);
+
+    // Upload to S3 for persistent storage
+    const s3Result = await s3Service.uploadBuffer({
+      buffer: result.buffer,
+      key: `tickets/${result.filename}`,
+      contentType: 'application/pdf'
+    });
+
+    console.log(`[TicketService] Ticket uploaded to S3: ${s3Result.location}`);
+    return s3Result.location;
+  } catch (err) {
+    console.error('[TicketService] Failed to generate/upload ticket:', err);
+    // Fallback to virtual path if S3 fails (for temporary backward compatibility)
+    const data = await getFullOrderData(booking_id);
+    if (data) {
+      return `/api/tickets/generated/ORDER_${data.orderRef}.pdf`;
+    }
+    throw err;
+  }
 }
 
 module.exports = { generateTicket, generateTicketBuffer, getFullOrderData };
