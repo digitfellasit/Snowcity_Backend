@@ -24,9 +24,9 @@ function mapCombo(row) {
     short_description: row.short_description,
     description: row.description,
     faq_items: row.faq_items || [],
-    head_schema: row.head_schema,
-    body_schema: row.body_schema,
-    footer_schema: row.footer_schema,
+    head_schema: row.head_schema || '',
+    body_schema: row.body_schema || '',
+    footer_schema: row.footer_schema || '',
     // Legacy fields for backward compatibility
     attraction_1_id: row.attraction_1_id,
     attraction_2_id: row.attraction_2_id,
@@ -54,9 +54,9 @@ async function createCombo({
   short_description = null,
   description = null,
   faq_items = [],
-  head_schema = null,
-  body_schema = null,
-  footer_schema = null
+  head_schema = '',
+  body_schema = '',
+  footer_schema = ''
 }) {
   const client = await pool.connect();
   try {
@@ -70,7 +70,7 @@ async function createCombo({
       `INSERT INTO combos (name, slug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, create_slots, meta_title, short_description, description, faq_items, head_schema, body_schema, footer_schema)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, $12, $13, $14, $15::jsonb, $16, $17, $18)
        RETURNING *`,
-      [name, finalSlug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, meta_title, short_description, description, JSON.stringify(faq_items || []), head_schema, body_schema, footer_schema]
+      [name, finalSlug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, meta_title, short_description, description, JSON.stringify(faq_items || []), head_schema || '', body_schema || '', footer_schema || '']
     );
 
     const combo = mapCombo(rows[0]);

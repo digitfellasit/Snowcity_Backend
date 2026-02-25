@@ -76,7 +76,117 @@ exports.listBookings = async function listBookings(req, res, next) {
     const comboTitleExpr = `COALESCE(NULLIF(CONCAT_WS(' + ', NULLIF(a1.title, ''), NULLIF(a2.title, '')), ''), CONCAT('Combo #', c.combo_id::text))`;
     const itemTitleExpr = `CASE WHEN b.item_type = 'Combo' THEN ${comboTitleExpr} ELSE a.title END`;
 
-    // ... existing where building ...
+    // ── Search (ref, user name, email, phone) ──
+    if (search && search.trim()) {
+      const term = `%${search.trim()}%`;
+      where.push(`(
+        b.booking_ref ILIKE $${i}
+        OR u.name ILIKE $${i}
+        OR u.email ILIKE $${i}
+        OR u.phone ILIKE $${i}
+        OR a.title ILIKE $${i}
+        OR CAST(b.booking_id AS TEXT) = $${i + 1}
+      )`);
+      params.push(term, search.trim());
+      i += 2;
+    }
+
+    // ── Payment status ──
+    if (payment_status && ['Pending', 'Completed', 'Failed', 'Cancelled'].includes(payment_status)) {
+      where.push(`b.payment_status = $${i}`);
+      params.push(payment_status);
+      i++;
+    }
+
+    // ── Booking status ──
+    if (booking_status && ['Booked', 'Redeemed', 'Expired', 'Cancelled'].includes(booking_status)) {
+      where.push(`b.booking_status = $${i}`);
+      params.push(booking_status);
+      i++;
+    }
+
+    // ── User email ──
+    if (user_email && user_email.trim()) {
+      where.push(`u.email ILIKE $${i}`);
+      params.push(`%${user_email.trim()}%`);
+      i++;
+    }
+
+    // ── User phone ──
+    if (user_phone && user_phone.trim()) {
+      where.push(`u.phone ILIKE $${i}`);
+      params.push(`%${user_phone.trim()}%`);
+      i++;
+    }
+
+    // ── Attraction filter ──
+    if (attractionId) {
+      where.push(`b.attraction_id = $${i}`);
+      params.push(attractionId);
+      i++;
+    }
+
+    // ── Combo filter ──
+    if (comboId) {
+      where.push(`b.combo_id = $${i}`);
+      params.push(comboId);
+      i++;
+    }
+
+    // ── Offer filter ──
+    if (offerId) {
+      where.push(`b.offer_id = $${i}`);
+      params.push(offerId);
+      i++;
+    }
+
+    // ── Item type (Attraction / Combo) ──
+    if (normalizedItemType) {
+      where.push(`b.item_type = $${i}`);
+      params.push(normalizedItemType);
+      i++;
+    }
+
+    // ── Date range ──
+    if (dateFrom) {
+      where.push(`b.booking_date >= $${i}`);
+      params.push(dateFrom);
+      i++;
+    }
+    if (dateTo) {
+      where.push(`b.booking_date <= $${i}`);
+      params.push(dateTo);
+      i++;
+    }
+
+    // ── Slot filters ──
+    if (slotId) {
+      where.push(`b.slot_id = $${i}`);
+      params.push(slotId);
+      i++;
+    }
+    if (slotStartTimeFilter) {
+      where.push(`b.slot_start_time >= $${i}`);
+      params.push(slotStartTimeFilter);
+      i++;
+    }
+    if (slotEndTimeFilter) {
+      where.push(`b.slot_end_time <= $${i}`);
+      params.push(slotEndTimeFilter);
+      i++;
+    }
+
+    // ── Scoped access (restrict to admin's attraction/combo scope) ──
+    if (attractionScope.length && !attractionScope.includes('*')) {
+      where.push(`(b.attraction_id = ANY($${i}) OR b.attraction_id IS NULL)`);
+      params.push(attractionScope);
+      i++;
+    }
+    if (comboScope.length && !comboScope.includes('*')) {
+      where.push(`(b.combo_id = ANY($${i}) OR b.combo_id IS NULL)`);
+      params.push(comboScope);
+      i++;
+    }
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const joins = `

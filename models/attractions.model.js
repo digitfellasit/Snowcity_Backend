@@ -21,9 +21,9 @@ async function createAttraction(payload) {
     meta_title = null,
     short_description = null,
     faq_items = [],
-    head_schema = null,
-    body_schema = null,
-    footer_schema = null,
+    head_schema = '',
+    body_schema = '',
+    footer_schema = '',
   } = payload;
 
   const { rows } = await pool.query(
@@ -50,9 +50,9 @@ async function createAttraction(payload) {
       meta_title,
       short_description,
       JSON.stringify(faq_items || []),
-      head_schema,
-      body_schema,
-      footer_schema,
+      head_schema || '',
+      body_schema || '',
+      footer_schema || '',
     ]
   );
 

@@ -76,9 +76,9 @@ async function createBlog(req, res, next) {
       raw_css: p.raw_css || null,
       raw_js: p.raw_js || null,
       faq_items: Array.isArray(p.faq_items) ? p.faq_items : [],
-      head_schema: p.head_schema || {},
-      body_schema: p.body_schema || {},
-      footer_schema: p.footer_schema || {},
+      head_schema: p.head_schema || '',
+      body_schema: p.body_schema || '',
+      footer_schema: p.footer_schema || '',
     };
     const row = await blogService.createBlog(payload);
     res.status(201).json(row);
@@ -168,9 +168,9 @@ async function previewBlog(req, res, next) {
       raw_css: p.raw_css || '',
       raw_js: p.raw_js || '',
       faq_items: Array.isArray(p.faq_items) ? p.faq_items : [],
-      head_schema: p.head_schema || {},
-      body_schema: p.body_schema || {},
-      footer_schema: p.footer_schema || {},
+      head_schema: p.head_schema || '',
+      body_schema: p.body_schema || '',
+      footer_schema: p.footer_schema || '',
       preview: true,
     };
     res.json(out);

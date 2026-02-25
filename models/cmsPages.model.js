@@ -34,12 +34,9 @@ function mapPage(row) {
   let faq_items = row.faq_items;
   if (typeof faq_items === 'string') { try { faq_items = JSON.parse(faq_items); } catch { faq_items = []; } }
   if (!Array.isArray(faq_items)) faq_items = [];
-  let head_schema = row.head_schema;
-  if (typeof head_schema === 'string') { try { head_schema = JSON.parse(head_schema); } catch { head_schema = {}; } }
-  let body_schema = row.body_schema;
-  if (typeof body_schema === 'string') { try { body_schema = JSON.parse(body_schema); } catch { body_schema = {}; } }
-  let footer_schema = row.footer_schema;
-  if (typeof footer_schema === 'string') { try { footer_schema = JSON.parse(footer_schema); } catch { footer_schema = {}; } }
+  let head_schema = row.head_schema || '';
+  let body_schema = row.body_schema || '';
+  let footer_schema = row.footer_schema || '';
 
   return {
     page_id: row.page_id,
@@ -108,9 +105,9 @@ async function createPage({
   const bulkImagesPayload = Array.isArray(bulk_images) ? JSON.stringify(bulk_images) : bulk_images;
   const navOrder = Number.isFinite(Number(nav_order)) ? Number(nav_order) : 0;
   const faqPayload = Array.isArray(faq_items) ? JSON.stringify(faq_items) : (faq_items || '[]');
-  const headSchemaPayload = typeof head_schema === 'object' ? JSON.stringify(head_schema) : (head_schema || '{}');
-  const bodySchemaPayload = typeof body_schema === 'object' ? JSON.stringify(body_schema) : (body_schema || '{}');
-  const footerSchemaPayload = typeof footer_schema === 'object' ? JSON.stringify(footer_schema) : (footer_schema || '{}');
+  const headSchemaPayload = head_schema || '';
+  const bodySchemaPayload = body_schema || '';
+  const footerSchemaPayload = footer_schema || '';
   try {
     const { rows } = await pool.query(
       `INSERT INTO cms_pages (
@@ -127,7 +124,7 @@ async function createPage({
         $8, $9, COALESCE($10, '[]'::jsonb), COALESCE($11, '[]'::jsonb), $12,
         $13, $14, $15, $16,
         $17, $18, $19, $20,
-        COALESCE($21, '[]'::jsonb), COALESCE($22, '{}'::jsonb), COALESCE($23, '{}'::jsonb), COALESCE($24, '{}'::jsonb)
+        COALESCE($21, '[]'::jsonb), COALESCE($22, ''), COALESCE($23, ''), COALESCE($24, '')
       )
        RETURNING *`,
       [
@@ -257,8 +254,8 @@ async function updatePage(page_id, fields = {}) {
     if ((k === 'gallery' || k === 'bulk_images' || k === 'faq_items') && Array.isArray(val)) {
       val = JSON.stringify(val);
     }
-    if ((k === 'head_schema' || k === 'body_schema' || k === 'footer_schema') && typeof val === 'object' && val !== null) {
-      val = JSON.stringify(val);
+    if ((k === 'head_schema' || k === 'body_schema' || k === 'footer_schema')) {
+      val = v || '';
     }
     sets.push(`${k} = $${params.length + 1}`);
     params.push(val);

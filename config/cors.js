@@ -2,7 +2,7 @@ const DEFAULT_ORIGINS = [
   'https://app.snowcityblr.com',
   'https://app.snowcityblr.com',
   'https://app.snowcityblr.com',
-  'http://localhost:5173',
+  'https://snowcity.vercel.app',
   'http://127.0.0.1:5174',
   'https://app.snowcityblr.com',
   'https://snowcity.vercel.app',

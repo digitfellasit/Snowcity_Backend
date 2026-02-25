@@ -171,9 +171,9 @@ exports.createPage = async (req, res, next) => {
       placement: p.placement || 'none',               // 'none'|'home_bottom'|'attraction_details'
       placement_ref_id: p.placement_ref_id || null,   // attraction id if placement is attraction_details
       faq_items: Array.isArray(p.faq_items) ? p.faq_items : [],
-      head_schema: p.head_schema || {},
-      body_schema: p.body_schema || {},
-      footer_schema: p.footer_schema || {},
+      head_schema: p.head_schema || '',
+      body_schema: p.body_schema || '',
+      footer_schema: p.footer_schema || '',
     };
 
     const row = await pagesModel.createPage(payload);
@@ -263,9 +263,9 @@ exports.previewPage = async (req, res, next) => {
       raw_css: p.raw_css || '',
       raw_js: p.raw_js || '',
       faq_items: Array.isArray(p.faq_items) ? p.faq_items : [],
-      head_schema: p.head_schema || {},
-      body_schema: p.body_schema || {},
-      footer_schema: p.footer_schema || {},
+      head_schema: p.head_schema || '',
+      body_schema: p.body_schema || '',
+      footer_schema: p.footer_schema || '',
       preview: true,
     };
     res.json(out);
