@@ -1,7 +1,7 @@
 // admin/models/admin.model.js
 const { pool } = require('../../config/db');
 
-const ADMIN_ROLES = ['root', 'admin', 'subadmin', 'superadmin'];
+const ADMIN_ROLES = ['root', 'admin', 'subadmin', 'superadmin', 'gm', 'staff', 'editor'];
 
 function sanitizeGranularity(granularity) {
   const g = String(granularity || 'day').toLowerCase();

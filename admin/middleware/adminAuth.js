@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 const { pool } = require('../../config/db');
 const logger = require('../../config/logger');
 
-const ADMIN_ROLES = new Set(['root', 'admin', 'subadmin', 'superadmin']);
+const ADMIN_ROLES = new Set(['root', 'admin', 'subadmin', 'superadmin', 'gm', 'staff', 'editor']);
 const SUPERUSER_IDS = new Set([1]);
 
 function getToken(req) {
@@ -78,11 +78,11 @@ async function adminAuth(req, res, next) {
     const roles = await loadUserRoles(user.user_id);
     const userIdNum = Number(user.user_id);
     const isSuperUser = !Number.isNaN(userIdNum) && SUPERUSER_IDS.has(userIdNum);
-    
+
     // GRANT FULL ACCESS TO ALL AUTHENTICATED USERS
     // No longer checking for admin roles - any authenticated user gets admin access
     const hasAdminRole = true; // Force admin access for all authenticated users
-    
+
     if (!hasAdminRole && !isSuperUser) {
       return res.status(403).json({ error: 'Forbidden: Admin role required' });
     }

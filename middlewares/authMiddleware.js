@@ -50,6 +50,75 @@ async function loadUserPermissions(userId) {
   return new Set(rows.map((r) => r.permission_key));
 }
 
+/**
+ * Load admin_access scopes for the user (for staff role scoping).
+ * Returns:
+ *   {
+ *     attraction: [id, id, ...],   // or ['*'] for full access
+ *     combo:      [id, id, ...],
+ *     banner:     [...],
+ *     page:       [...],
+ *     blog:       [...],
+ *     gallery:    [...],
+ *     module_permissions: ['analytics', 'bookings', ...]
+ *   }
+ */
+async function loadUserScopes(userId) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT resource_type, resource_id, module_permissions
+       FROM admin_access
+       WHERE user_id = $1
+       ORDER BY resource_type, resource_id`,
+      [userId]
+    );
+
+    const scopes = {
+      attraction: [],
+      combo: [],
+      banner: [],
+      page: [],
+      blog: [],
+      gallery: [],
+      module_permissions: [],
+    };
+
+    for (const row of rows) {
+      const rt = row.resource_type;
+      // Special row: resource_type='modules' stores module-level permissions
+      if (rt === 'modules') {
+        scopes.module_permissions = Array.isArray(row.module_permissions)
+          ? row.module_permissions
+          : [];
+        continue;
+      }
+      if (rt in scopes) {
+        const val = row.resource_id;
+        // '*' sentinel token stored as negative -1 means full module access
+        if (val === null || val === -1) {
+          scopes[rt] = ['*'];
+        } else if (!Array.isArray(scopes[rt]) || !scopes[rt].includes('*')) {
+          if (!Array.isArray(scopes[rt])) scopes[rt] = [];
+          scopes[rt].push(Number(val));
+        }
+      }
+    }
+
+    return scopes;
+  } catch {
+    // Table may not exist yet — return empty scopes
+    return {
+      attraction: [],
+      combo: [],
+      banner: [],
+      page: [],
+      blog: [],
+      gallery: [],
+      module_permissions: [],
+    };
+  }
+}
+
 async function authenticate(req) {
   const token = getToken(req);
   if (!token) {
@@ -102,6 +171,7 @@ async function authenticate(req) {
     otp_verified: user.otp_verified,
     roles: null,
     permissions: null,
+    scopes: null,
     tokenPayload: {
       jti: payload.jti,
       iat: payload.iat,
@@ -126,6 +196,24 @@ async function ensurePermissions(req) {
     req.user.permissions = await loadUserPermissions(req.user.id);
   }
   return req.user.permissions;
+}
+
+async function ensureScopes(req) {
+  if (!req.user) throw Object.assign(new Error('Auth required'), { status: 401 });
+  if (!req.user.scopes) {
+    req.user.scopes = await loadUserScopes(req.user.id);
+  }
+  return req.user.scopes;
+}
+
+/** Check if user is a super-level admin (bypass all restrictions) */
+async function isSuperLevel(req) {
+  try {
+    const roles = await ensureRoles(req);
+    return roles.includes('superadmin') || roles.includes('root');
+  } catch {
+    return false;
+  }
 }
 
 async function optionalAuth(req, res, next) {
@@ -168,4 +256,7 @@ module.exports = {
   requireVerified,
   ensureRoles,
   ensurePermissions,
+  ensureScopes,
+  isSuperLevel,
+  loadUserScopes,
 };

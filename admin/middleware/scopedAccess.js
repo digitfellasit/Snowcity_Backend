@@ -9,7 +9,7 @@ const MODULE_ALL_PREFIX = '__module_all__';
  */
 async function loadUserScopes(userId) {
   const { rows } = await pool.query(
-    `SELECT resource_type, resource_id FROM admin_access WHERE user_id = $1`,
+    `SELECT resource_type, resource_id, module_permissions FROM admin_access WHERE user_id = $1`,
     [userId]
   );
   const scopes = {
@@ -19,28 +19,40 @@ async function loadUserScopes(userId) {
     page: [],
     blog: [],
     gallery: [],
+    module_permissions: [],
   };
   for (const row of rows) {
     const { resource_type, resource_id } = row;
-    // If a module token is present, treat it as full access to that type
-    if (typeof resource_id === 'string' && resource_id.startsWith(MODULE_ALL_PREFIX)) {
-      // We'll resolve full access at query time; for now, mark with a sentinel
+    // Special row: resource_type='modules' stores module-level permissions
+    if (resource_type === 'modules') {
+      scopes.module_permissions = Array.isArray(row.module_permissions)
+        ? row.module_permissions
+        : [];
+      continue;
+    }
+    // If resource_id is -1, treat it as full access to that type
+    if (resource_id === null || resource_id === -1) {
       scopes[resource_type] = ['*']; // sentinel for full module
+    } else if (typeof resource_id === 'string' && resource_id.startsWith(MODULE_ALL_PREFIX)) {
+      scopes[resource_type] = ['*'];
     } else {
       scopes[resource_type] = scopes[resource_type] || [];
-      scopes[resource_type].push(Number(resource_id));
+      if (!scopes[resource_type].includes('*')) {
+        scopes[resource_type].push(Number(resource_id));
+      }
     }
   }
 
   // Auto-include combos that contain scoped attractions (unless full combo access)
   if (!scopes.combo.includes('*') && scopes.attraction.length && !scopes.attraction.includes('*')) {
-    const { rows: comboRows } = await pool.query(
-      `SELECT DISTINCT combo_id FROM combos WHERE attraction_ids && $1::bigint[]`,
-      [scopes.attraction]
-    );
-    const autoComboIds = comboRows.map(r => r.combo_id);
-    // Merge with any explicitly granted combo IDs
-    scopes.combo = [...new Set([...scopes.combo, ...autoComboIds])];
+    try {
+      const { rows: comboRows } = await pool.query(
+        `SELECT DISTINCT combo_id FROM combos WHERE attraction_ids && $1::bigint[]`,
+        [scopes.attraction]
+      );
+      const autoComboIds = comboRows.map(r => r.combo_id);
+      scopes.combo = [...new Set([...scopes.combo, ...autoComboIds])];
+    } catch { /* combos table might not have attraction_ids column */ }
   }
 
   return scopes;
@@ -53,7 +65,7 @@ async function attachScopes(req, res, next) {
   if (!req.user?.id) return next();
   // If user has role admin, root, or superadmin, grant full access to all modules
   const userRoles = Array.isArray(req.user.roles) ? req.user.roles : [];
-  if (userRoles.some(r => ['admin', 'root', 'superadmin'].includes(r))) {
+  if (userRoles.some(r => ['admin', 'root', 'superadmin', 'gm'].includes(r))) {
     req.user.scopes = {
       attraction: ['*'],
       combo: ['*'],
@@ -77,6 +89,18 @@ async function attachScopes(req, res, next) {
       gallery: [],
     };
   }
+
+  // Editors get full access to all catalog resource types (their role limits which
+  // modules they can see in the sidebar/router, but data inside those modules is unscoped)
+  if (userRoles.includes('editor')) {
+    req.user.scopes.attraction = ['*'];
+    req.user.scopes.combo = ['*'];
+    req.user.scopes.banner = ['*'];
+    req.user.scopes.page = ['*'];
+    req.user.scopes.blog = ['*'];
+    req.user.scopes.gallery = ['*'];
+  }
+
   next();
 }
 

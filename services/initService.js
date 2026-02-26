@@ -24,6 +24,14 @@ const ALL_PERMISSION_KEYS = [
     'admin-management:read', 'admin-management:write',
     'dashboard:read',
     'analytics:read',
+    'chatbot:read', 'chatbot:write',
+    'dynamic-pricing:read', 'dynamic-pricing:write',
+    'instagram:read', 'instagram:write',
+    'payments:read', 'payments:write',
+    'site-settings:read', 'site-settings:write',
+    'tracking:read', 'tracking:write',
+    'uploads:read', 'uploads:write',
+    'tickets:read', 'tickets:write',
 ];
 
 const MODULE_RESOURCES = ['attraction', 'combo', 'banner', 'page', 'blog', 'gallery'];

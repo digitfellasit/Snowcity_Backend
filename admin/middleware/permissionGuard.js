@@ -17,8 +17,8 @@ function hasBypass(req) {
   const uid = getUserId(req);
   if (uid != null && SUPERUSER_IDS.has(uid)) return true;
   const roles = (req.user?.roles || []).map((r) => String(r).toLowerCase());
-  // Allow full bypass for root (and optionally superadmin)
-  return roles.includes('root') || roles.includes('superadmin');
+  // Full bypass for root, superadmin, admin, and gm
+  return roles.includes('root') || roles.includes('superadmin') || roles.includes('admin') || roles.includes('gm');
 }
 
 async function loadPermissions(userId) {

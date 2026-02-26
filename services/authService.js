@@ -10,7 +10,7 @@ const { sendSMS } = require('../config/twilio');
 const SALT_ROUNDS = parseInt(process.env.BCRYPT_SALT_ROUNDS || '10', 10);
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 const JWT_SECRET = process.env.JWT_SECRET || 'change_me';
-const FIXED_TEST_OTP = process.env.FIXED_TEST_OTP || '123456';
+const FIXED_TEST_OTP = process.env.FIXED_TEST_OTP || '';
 
 function signJwt(payload, options = {}) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN, ...options });
@@ -166,8 +166,9 @@ async function sendOtp({ user_id = null, email = null, phone = null, name = null
       throw err;
     }
 
-    // Create user without password (passwordless for regular users)
-    user = await register({ name, email, phone, whatsapp_consent });
+    // register() returns { user, token, ... } — extract the inner user row
+    const regResult = await register({ name, email, phone, whatsapp_consent });
+    user = regResult.user || regResult;
     logger.info('Created new user via OTP flow', { user_id: user.user_id, email, phone });
   }
 
@@ -185,20 +186,45 @@ async function sendOtp({ user_id = null, email = null, phone = null, name = null
     [otp, expiresAt, user.user_id]
   );
 
+  // Determine the phone to send SMS to:
+  // 1. Prefer the phone stored on the user record
+  // 2. Fall back to the phone supplied in the request (for existing users who signed up with only email)
+  const smsPhone = user.phone || phone || null;
+
+  // If user has no phone saved yet but we have one from the request, persist it
+  if (!user.phone && smsPhone) {
+    await pool.query(
+      `UPDATE users SET phone = $1, updated_at = NOW() WHERE user_id = $2`,
+      [smsPhone, user.user_id]
+    );
+    user.phone = smsPhone;
+    logger.info('Updated user phone from request', { user_id: user.user_id, phone: smsPhone });
+  }
+
   // deliver
   if (!FIXED_TEST_OTP) {
-    if (channel === 'email' && user.email) {
+    if (smsPhone) {
+      logger.info('Sending OTP SMS', { phone: smsPhone });
+      await sendSMS({ to: smsPhone, body: `Your SnowCity OTP is ${otp}. Valid for 10 minutes.` });
+    } else if (channel === 'email' && user.email) {
+      // Fallback: send to email if no phone available at all
+      logger.info('No phone available, falling back to email OTP', { email: user.email });
       await sendMail({
         to: user.email,
         subject: 'Your SnowCity OTP',
         html: `<p>Your OTP is <b>${otp}</b>. It expires in 10 minutes.</p>`,
         text: `Your OTP is ${otp}. It expires in 10 minutes.`,
       });
-    } else if (channel === 'sms' && user.phone) {
-      await sendSMS({ to: user.phone, body: `Your SnowCity OTP is ${otp}. Valid for 10 minutes.` });
     } else {
-      logger.warn('sendOtp: No valid channel/recipient', { channel, email: user.email, phone: user.phone });
+      logger.warn('sendOtp: No phone or email available to deliver OTP', {
+        user_id: user.user_id,
+        channel,
+        hasEmail: !!user.email,
+        hasPhone: !!smsPhone,
+      });
     }
+  } else {
+    logger.info('FIXED_TEST_OTP active — skipping real SMS delivery', { otp: FIXED_TEST_OTP });
   }
 
   return { user_id: user.user_id, sent: true, channel, otp: FIXED_TEST_OTP ? otp : undefined };
@@ -268,11 +294,11 @@ async function verifyOtp({ user_id, otp, email = null, phone = null, name = null
     const userDetails = userRes.rows[0];
     if (userDetails && userDetails.phone) {
       const { addContact } = require('../services/interaktService');
-      const addResult = await addContact({ 
-        phone: userDetails.phone, 
-        name: userDetails.name, 
-        email: userDetails.email, 
-        userId 
+      const addResult = await addContact({
+        phone: userDetails.phone,
+        name: userDetails.name,
+        email: userDetails.email,
+        userId
       });
       if (addResult.success) {
         console.log('User added to Interakt contacts successfully');
@@ -288,18 +314,18 @@ async function verifyOtp({ user_id, otp, email = null, phone = null, name = null
 
   // Get user details
   const user = await usersModel.getUserById(userId);
-  
+
   // Generate JWT token automatically after OTP verification
   const token = signJwt({ sub: user.user_id, email: user.email });
   const exp = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7); // 7 days
 
   await usersModel.setJwt(user.user_id, { token, expiresAt: exp });
 
-  return { 
-    verified: true, 
-    user, 
-    token, 
-    expires_at: exp.toISOString() 
+  return {
+    verified: true,
+    user,
+    token,
+    expires_at: exp.toISOString()
   };
 }
 
