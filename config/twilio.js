@@ -21,7 +21,7 @@ if (!SMS_API_KEY) {
 async function sendSMS({ to, body }) {
   if (!SMS_API_KEY) throw new Error('SMS not configured — TEXTLOCAL_API_KEY missing');
 
-  // Normalise to 10-digit number (remove any non-digits and take last 10)
+  // Normalize to 10-digit number (remove any non-digits and take last 10)
   let number = String(to).replace(/\D/g, '').slice(-10);
 
   const params = new URLSearchParams({

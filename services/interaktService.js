@@ -71,7 +71,7 @@ function formatSlotRange(row) {
 }
 
 function resolveMediaUrl(ticketPath) {
-  const base = FIXED_APP_URL || 'https://app.snowcityblr.com';
+  const base = FIXED_APP_URL || 'app.snowcityblr.com';
   if (!ticketPath) return null;
   if (/^https?:/i.test(ticketPath)) return ticketPath;
 

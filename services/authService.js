@@ -205,7 +205,7 @@ async function sendOtp({ user_id = null, email = null, phone = null, name = null
   if (!FIXED_TEST_OTP) {
     if (smsPhone) {
       logger.info('Sending OTP SMS', { phone: smsPhone });
-      await sendSMS({ to: smsPhone, body: `Your SnowCity OTP is ${otp}. Valid for 10 minutes.` });
+      await sendSMS({ to: smsPhone, body: `Your OTP is ${otp} IMMSMS` });
     } else if (channel === 'email' && user.email) {
       // Fallback: send to email if no phone available at all
       logger.info('No phone available, falling back to email OTP', { email: user.email });

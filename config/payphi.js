@@ -13,10 +13,10 @@ function normalizeBaseUrl(raw, fallback) {
     .map((val) => val.trim())
     .filter(Boolean);
   const chosen = parts[0] || fallback || '';
-  return (chosen || fallback || 'https://app.snowcityblr.com').replace(/\/+$/, '');
+  return (chosen || fallback || 'app.snowcityblr.com').replace(/\/+$/, '');
 }
 
-const APP_URL = normalizeBaseUrl(process.env.APP_URL, 'https://app.snowcityblr.com');
+const APP_URL = normalizeBaseUrl(process.env.APP_URL, 'app.snowcityblr.com');
 
 let returnUrlCandidate = (process.env.PAYPHI_RETURN_URL || '').trim();
 if (!returnUrlCandidate) {

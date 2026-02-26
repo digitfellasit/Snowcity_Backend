@@ -7,7 +7,7 @@ async function testComboSlotsAPI() {
   console.log('\n🎯 Testing Combo Slots API:');
   try {
     const axios = require('axios');
-    const response = await axios.get(`https://app.snowcityblr.com/api/combos/1/slots?date=2025-11-29`);
+    const response = await axios.get(`app.snowcityblr.com/api/combos/1/slots?date=2025-11-29`);
     console.log('✅ Combo Slots API Response:');
     console.log('   Status:', response.status);
     console.log('   Data Count:', response.data?.data?.length || 0);
@@ -55,7 +55,7 @@ async function testAttractionSlotsAPI() {
   console.log('\n🎢 Testing Attraction Slots API:');
   try {
     const axios = require('axios');
-    const response = await axios.get(`https://app.snowcityblr.com/api/attractions/1/slots?date=2025-11-29`);
+    const response = await axios.get(`app.snowcityblr.com/api/attractions/1/slots?date=2025-11-29`);
     console.log('✅ Attraction Slots API Response:');
     console.log('   Status:', response.status);
     console.log('   Data Count:', response.data?.data?.length || 0);
@@ -103,7 +103,7 @@ async function testDirectSlotsAPI() {
   console.log('\n🔍 Testing Direct Slots API:');
   try {
     const axios = require('axios');
-    const response = await axios.get(`https://app.snowcityblr.com/api/slots?attraction_id=1&date=2025-11-29`);
+    const response = await axios.get(`app.snowcityblr.com/api/slots?attraction_id=1&date=2025-11-29`);
     console.log('✅ Direct Slots API Response:');
     console.log('   Status:', response.status);
     console.log('   Data Count:', response.data?.data?.length || 0);
