@@ -7,7 +7,7 @@ async function checkDatabase() {
     const axios = require('axios');
 
     console.log('\n🎯 Checking Combos:');
-    const combosResponse = await axios.get('app.snowcityblr.com/api/combos');
+    const combosResponse = await axios.get('https://app.snowcity.blr/api/combos');
     console.log('   Status:', combosResponse.status);
     console.log('   Count:', combosResponse.data?.data?.length || 0);
 
@@ -20,7 +20,7 @@ async function checkDatabase() {
     }
 
     console.log('\n🎢 Checking Attractions:');
-    const attractionsResponse = await axios.get('app.snowcityblr.com/api/attractions');
+    const attractionsResponse = await axios.get('https://app.snowcity.blr/api/attractions');
     console.log('   Status:', attractionsResponse.status);
     console.log('   Count:', attractionsResponse.data?.data?.length || 0);
 
@@ -37,7 +37,7 @@ async function checkDatabase() {
       console.log(`\n🎯 Testing Combo ${firstComboId}:`);
 
       try {
-        const comboSlotsResponse = await axios.get(`app.snowcityblr.com/api/combos/${firstComboId}/slots?date=2025-11-29`);
+        const comboSlotsResponse = await axios.get(`https://app.snowcity.blr/api/combos/${firstComboId}/slots?date=2025-11-29`);
         console.log('   Status:', comboSlotsResponse.status);
         console.log('   Slots:', comboSlotsResponse.data?.data?.length || 0);
 
@@ -64,7 +64,7 @@ async function checkDatabase() {
       console.log(`\n🎢 Testing Attraction ${firstAttractionId}:`);
 
       try {
-        const attractionSlotsResponse = await axios.get(`app.snowcityblr.com/api/attractions/${firstAttractionId}/slots?date=2025-11-29`);
+        const attractionSlotsResponse = await axios.get(`https://app.snowcity.blr/api/attractions/${firstAttractionId}/slots?date=2025-11-29`);
         console.log('   Status:', attractionSlotsResponse.status);
         console.log('   Slots:', attractionSlotsResponse.data?.data?.length || 0);
 

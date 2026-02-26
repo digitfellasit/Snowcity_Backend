@@ -1,26 +1,54 @@
 const fs = require('fs');
 const path = require('path');
+const nodemailer = require('nodemailer');
 const logger = require('./logger');
 
 // Zeptomail configuration
-// Required env vars: ZEPTOMAIL_URL, ZEPTOMAIL_TOKEN, MAIL_FROM
 const ZEPTO_URL = process.env.ZEPTOMAIL_URL || 'https://api.zeptomail.com/v1.1/email';
 const ZEPTO_TOKEN = process.env.ZEPTOMAIL_TOKEN || process.env.ZEPTOMAIL_API_KEY || null;
 const MAIL_FROM = process.env.MAIL_FROM || process.env.MAIL_FROM_ADDRESS || 'noreply@snowcityblr.com';
+const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME || 'SnowCity';
 
-let ZeptoClient = null;
-let client = null;
+// SMTP configuration (Nodemailer)
+const SMTP_HOST = process.env.SMTP_HOST;
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASS = process.env.SMTP_PASS;
+const SMTP_SECURE = process.env.SMTP_SECURE === 'true' || SMTP_PORT === 465;
+
+let zeptoClient = null;
+let smtpTransporter = null;
+
+// Initialize Zeptomail if token is present
 try {
-  const { SendMailClient } = require('zeptomail');
-  ZeptoClient = SendMailClient;
   if (ZEPTO_TOKEN) {
-    client = new ZeptoClient({ url: ZEPTO_URL, token: ZEPTO_TOKEN });
+    const { SendMailClient } = require('zeptomail');
+    zeptoClient = new SendMailClient({ url: ZEPTO_URL, token: ZEPTO_TOKEN });
     logger.info('Zeptomail client configured');
-  } else {
-    logger.warn('Zeptomail token not set; email sending is disabled until ZEPTOMAIL_TOKEN is provided');
   }
 } catch (err) {
-  logger.warn('Zeptomail SDK not installed; please npm install zeptomail to enable email sending');
+  logger.warn('Zeptomail SDK initialization failed or not installed');
+}
+
+// Initialize Nodemailer if SMTP settings are present
+if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+  smtpTransporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_SECURE,
+    auth: {
+      user: SMTP_USER,
+      pass: SMTP_PASS,
+    },
+    tls: {
+      rejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== 'false'
+    }
+  });
+  logger.info('SMTP transporter configured (Nodemailer)');
+}
+
+if (!zeptoClient && !smtpTransporter) {
+  logger.error('No email service configured (Zeptomail or SMTP). Email sending will fail.');
 }
 
 async function buildAttachments(attachments = []) {
@@ -29,11 +57,17 @@ async function buildAttachments(attachments = []) {
     try {
       if (a.path && fs.existsSync(a.path)) {
         const buffer = fs.readFileSync(a.path);
-        out.push({ name: a.filename || path.basename(a.path), content: buffer.toString('base64'), contentType: a.contentType || 'application/octet-stream' });
+        out.push({
+          filename: a.filename || path.basename(a.path),
+          content: buffer,
+          contentType: a.contentType || 'application/octet-stream'
+        });
       } else if (a.content && a.filename) {
-        // assume content is a Buffer or base64 string
-        const content = Buffer.isBuffer(a.content) ? a.content.toString('base64') : String(a.content);
-        out.push({ name: a.filename, content, contentType: a.contentType || 'application/octet-stream' });
+        out.push({
+          filename: a.filename,
+          content: a.content,
+          contentType: a.contentType || 'application/octet-stream'
+        });
       }
     } catch (e) {
       logger.warn('Failed to prepare attachment', { err: e.message, attachment: a.filename || a.path });
@@ -43,48 +77,65 @@ async function buildAttachments(attachments = []) {
 }
 
 async function sendMail({ to, subject, html, text, attachments = [] }) {
-  if (!client) {
-    const err = new Error('Zeptomail client not configured (missing ZEPTOMAIL_TOKEN or SDK)');
-    logger.warn('Attempted to send email without Zeptomail configuration', { to, subject });
-    throw err;
-  }
-
-  const toList = Array.isArray(to) ? to : [{ email_address: { address: String(to) } }];
-  // If to is a simple string, convert to zeptomail expected shape
-  if (!Array.isArray(to) && typeof to === 'string') {
-    // handled above
-  } else if (Array.isArray(to) && to.length && typeof to[0] === 'string') {
-    // array of emails
-    toList.length = 0;
-    for (const t of to) toList.push({ email_address: { address: String(t) } });
-  } else if (Array.isArray(to) && to.length && to[0] && to[0].email_address) {
-    // already shaped
-  }
-
   const preparedAttachments = await buildAttachments(attachments);
+  const toEmail = Array.isArray(to) ? to[0] : to; // Simplify for unified handling if needed
 
-  const payload = {
-    from: { address: MAIL_FROM, name: process.env.MAIL_FROM_NAME || 'SnowCity' },
-    to: toList,
-    subject: subject || '',
-    htmlbody: html || (text ? `<pre>${text}</pre>` : ''),
-  };
+  // Try Zeptomail first if configured
+  if (zeptoClient) {
+    try {
+      const toList = Array.isArray(to)
+        ? to.map(t => ({ email_address: { address: String(t) } }))
+        : [{ email_address: { address: String(to) } }];
 
-  if (preparedAttachments.length) {
-    payload.attachments = preparedAttachments.map((a) => ({ name: a.name, content: a.content, mime_type: a.contentType }));
+      const payload = {
+        from: { address: MAIL_FROM, name: MAIL_FROM_NAME },
+        to: toList,
+        subject: subject || '',
+        htmlbody: html || (text ? `<pre>${text}</pre>` : ''),
+        attachments: preparedAttachments.map(a => ({
+          name: a.filename,
+          content: a.content.toString('base64'),
+          mime_type: a.contentType
+        }))
+      };
+
+      const resp = await zeptoClient.sendMail(payload);
+      logger.info('Email sent via Zeptomail', { to, subject });
+      return resp;
+    } catch (err) {
+      logger.error('Zeptomail failed, falling back to SMTP if available', { err: err.message });
+      if (!smtpTransporter) throw err;
+    }
   }
 
-  try {
-    const resp = await client.sendMail(payload);
-    logger.info('Email sent via Zeptomail', { to, subject, resp: resp?.response || null });
-    return resp;
-  } catch (err) {
-    logger.error('Zeptomail sendMail failed', { err: err?.message || err });
-    throw err;
+  // Fallback or Primary: SMTP (Nodemailer)
+  if (smtpTransporter) {
+    try {
+      const mailOptions = {
+        from: `"${MAIL_FROM_NAME}" <${MAIL_FROM}>`,
+        to: Array.isArray(to) ? to.join(', ') : to,
+        subject: subject || '',
+        text: text || '',
+        html: html || '',
+        attachments: preparedAttachments.map(a => ({
+          filename: a.filename,
+          content: a.content,
+          contentType: a.contentType
+        }))
+      };
+
+      const info = await smtpTransporter.sendMail(mailOptions);
+      logger.info('Email sent via SMTP', { to, subject, messageId: info.messageId });
+      return info;
+    } catch (err) {
+      logger.error('SMTP sendMail failed', { err: err.message });
+      throw err;
+    }
   }
+
+  throw new Error('No email service configured to handle the request');
 }
 
 module.exports = {
-  client,
   sendMail,
 };

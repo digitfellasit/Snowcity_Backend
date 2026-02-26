@@ -141,16 +141,52 @@ function generateOtp() {
 }
 
 async function sendOtp({ user_id = null, email = null, phone = null, name = null, channel = 'sms', createIfNotExists = false, whatsapp_consent = false }) {
-  // Resolve user if needed
+  // Resolve user — phone is the unique identifier, so prioritize phone lookup
   let user = null;
   if (user_id) {
     user = await usersModel.getUserById(user_id);
-  } else if (email) {
-    const row = await pool.query(`SELECT * FROM users WHERE email = $1`, [email]);
-    user = row.rows[0] || null;
   } else if (phone) {
+    // Phone is unique — check by phone first
     const row = await pool.query(`SELECT * FROM users WHERE phone = $1`, [phone]);
     user = row.rows[0] || null;
+  }
+
+  // If not found by phone, try by email as fallback
+  if (!user && email) {
+    const row = await pool.query(`SELECT * FROM users WHERE email = $1`, [email]);
+    user = row.rows[0] || null;
+  }
+
+  // If user exists (found by phone), update their email/name if different
+  if (user && phone) {
+    const updates = [];
+    const values = [];
+    let paramIdx = 1;
+
+    if (email && user.email !== email) {
+      updates.push(`email = $${paramIdx++}`);
+      values.push(email);
+      logger.info('Updating user email for existing phone', { user_id: user.user_id, oldEmail: user.email, newEmail: email });
+    }
+    if (name && name.trim() && user.name !== name.trim()) {
+      updates.push(`name = $${paramIdx++}`);
+      values.push(name.trim());
+    }
+    if (whatsapp_consent !== undefined && whatsapp_consent !== null) {
+      updates.push(`whatsapp_consent = $${paramIdx++}`);
+      values.push(whatsapp_consent);
+    }
+
+    if (updates.length > 0) {
+      updates.push(`updated_at = NOW()`);
+      values.push(user.user_id);
+      await pool.query(
+        `UPDATE users SET ${updates.join(', ')} WHERE user_id = $${paramIdx}`,
+        values
+      );
+      // Refresh user data
+      user = await usersModel.getUserById(user.user_id);
+    }
   }
 
   // Create user if not exists and createIfNotExists is true (for booking flow)

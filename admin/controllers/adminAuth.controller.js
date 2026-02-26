@@ -138,13 +138,15 @@ exports.adminForgotPassword = async (req, res, next) => {
     // Check if user exists
     const { pool } = require('../../config/db');
     const { rows } = await pool.query(
-      'SELECT user_id, name FROM users WHERE email = $1',
+      'SELECT user_id, name, email FROM users WHERE email = $1',
       [email]
     );
 
+    // Corporate Response: Always mention the email for clarity, but be vague if it doesn't exist for security
+    const successMsg = `If an account with email ${email} exists, a password reset link has been sent to it.`;
+
     if (!rows[0]) {
-      // Don't reveal if email exists or not for security
-      res.json({ message: 'If an account with that email exists, a password reset link has been sent.' });
+      res.json({ message: successMsg, email });
       return;
     }
 
@@ -153,7 +155,7 @@ exports.adminForgotPassword = async (req, res, next) => {
     // Generate reset token
     const resetToken = crypto.randomBytes(32).toString('hex');
     const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
-    const resetTokenExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const resetTokenExpiry = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes for better corporate standards
 
     // Store reset token
     await pool.query(
@@ -162,31 +164,52 @@ exports.adminForgotPassword = async (req, res, next) => {
     );
 
     // Send reset email
-    const resetUrl = `${process.env.FRONTEND_URL || 'app.snowcityblr.com'}/admin/reset-password?token=${resetToken}`;
+    const frontendUrl = process.env.CLIENT_URL?.split(',')[0] || 'https://snowcity.vercel.app';
+    const resetUrl = `${frontendUrl}/admin/reset-password?token=${resetToken}`;
     const mailOptions = {
       to: email,
-      subject: 'SnowCity Admin - Password Reset',
+      subject: 'SnowCity - Admin Password Reset Request',
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #1f2937;">SnowCity Admin - Password Reset</h2>
-          <p>Hello ${user.name},</p>
-          <p>You have requested to reset your password for your SnowCity admin account.</p>
-          <p>Please click the link below to reset your password:</p>
-          <p style="margin: 20px 0;">
-            <a href="${resetUrl}" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Reset Password</a>
-          </p>
-          <p><strong>This link will expire in 10 minutes.</strong></p>
-          <p>If you did not request this password reset, please ignore this email.</p>
-          <p>For security reasons, please do not share this email with anyone.</p>
-          <br>
-          <p>Best regards,<br>SnowCity Team</p>
-        </div>
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            .container { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #f9fafb; }
+            .card { background-color: #ffffff; border-radius: 16px; padding: 32px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb; }
+            .logo { font-size: 24px; font-weight: 800; color: #003de6; margin-bottom: 24px; text-align: center; }
+            .title { font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 16px; }
+            .text { color: #4b5563; line-height: 1.6; margin-bottom: 24px; }
+            .button { display: inline-block; background-color: #003de6; color: #ffffff !important; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; text-align: center; }
+            .footer { margin-top: 32px; font-size: 12px; color: #9ca3af; text-align: center; }
+            .expiry { font-size: 13px; color: #6b7280; font-style: italic; margin-top: 16px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="logo">SNOWCITY</div>
+            <div class="card">
+              <div class="title">Password Reset Request</div>
+              <p class="text">Hello ${user.name || 'Admin'},</p>
+              <p class="text">We received a request to reset your password for the SnowCity admin dashboard. If you didn't make this request, you can safely ignore this email.</p>
+              <div style="text-align: center;">
+                <a href="${resetUrl}" class="button">Reset Password</a>
+              </div>
+              <p class="expiry">This link is valid for 30 minutes for security purposes.</p>
+              <p class="text" style="margin-top: 24px;">For your security, never share this link with anyone.</p>
+            </div>
+            <div class="footer">
+              &copy; ${new Date().getFullYear()} SnowCity. All rights reserved.<br>
+              This is an automated message, please do not reply.
+            </div>
+          </div>
+        </body>
+        </html>
       `
     };
 
     await sendMail(mailOptions);
 
-    res.json({ message: 'If an account with that email exists, a password reset link has been sent.' });
+    res.json({ message: successMsg, email });
   } catch (err) {
     next(err);
   }
@@ -215,17 +238,17 @@ exports.adminResetPassword = async (req, res, next) => {
     // Find user with valid reset token
     const { pool } = require('../../config/db');
     const { rows } = await pool.query(
-      'SELECT user_id FROM users WHERE reset_token = $1 AND reset_token_expiry > NOW()',
+      'SELECT user_id, name, email FROM users WHERE reset_token = $1 AND reset_token_expiry > NOW()',
       [tokenHash]
     );
 
     if (!rows[0]) {
-      const err = new Error('Invalid or expired reset token');
+      const err = new Error('The password reset link is invalid or has expired');
       err.status = 400;
       throw err;
     }
 
-    const userId = rows[0].user_id;
+    const user = rows[0];
 
     // Hash new password
     const SALT_ROUNDS = parseInt(process.env.BCRYPT_SALT_ROUNDS || '10', 10);
@@ -234,10 +257,25 @@ exports.adminResetPassword = async (req, res, next) => {
     // Update password and clear reset token
     await pool.query(
       'UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expiry = NULL, updated_at = NOW() WHERE user_id = $2',
-      [newPasswordHash, userId]
+      [newPasswordHash, user.user_id]
     );
 
-    res.json({ message: 'Password has been reset successfully' });
+    // Send confirmation email
+    await sendMail({
+      to: user.email,
+      subject: 'SnowCity - Password Changed Successfully',
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #111827;">Password Changed</h2>
+          <p>Hello ${user.name},</p>
+          <p>Your password for the SnowCity admin account associated with <b>${user.email}</b> has been successfully reset.</p>
+          <p>If you did not perform this action, please contact support immediately.</p>
+          <p>Best regards,<br>SnowCity Team</p>
+        </div>
+      `
+    });
+
+    res.json({ message: 'Your password has been successfully reset and is ready to use.' });
   } catch (err) {
     next(err);
   }

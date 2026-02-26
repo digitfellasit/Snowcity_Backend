@@ -20,12 +20,12 @@ console.log('\n1. START SERVER:');
 console.log('   npm start');
 
 console.log('\n2. TEST ATTRACTION SLOTS ERROR:');
-console.log('   Navigate to: app.snowcityblr.com/admin/catalog/attraction-slots');
+console.log('   Navigate to: https://app.snowcity.blr/admin/catalog/attraction-slots');
 console.log('   (without attraction_id parameter)');
 console.log('   Frontend shows: "Please select an attraction to view slots."');
 
 console.log('\n3. TEST COMBO SLOTS ERROR:');
-console.log('   Navigate to: app.snowcityblr.com/admin/catalog/combo-slots');
+console.log('   Navigate to: https://app.snowcity.blr/admin/catalog/combo-slots');
 console.log('   (without combo_id parameter)');
 console.log('   Frontend shows: "Please select a combo to view slots."');
 

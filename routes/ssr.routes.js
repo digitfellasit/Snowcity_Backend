@@ -31,7 +31,7 @@ async function loadSeoSettings() {
 
 // Determine client URL from env
 function getClientUrl() {
-    return process.env.CLIENT_URL || 'app.snowcityblr.com';
+    return process.env.CLIENT_URL || 'https://app.snowcity.blr';
 }
 
 // ── SSR Preview (Admin) ──────────────────────────────────────────────────

@@ -71,11 +71,11 @@ function formatSlotRange(row) {
 }
 
 function resolveMediaUrl(ticketPath) {
-  const base = FIXED_APP_URL || 'app.snowcityblr.com';
+  const base = FIXED_APP_URL || 'https://app.snowcity.blr';
   if (!ticketPath) return null;
   if (/^https?:/i.test(ticketPath)) return ticketPath;
 
-  // Ensure we don't end up with app.snowcityblr.com//uploads
+  // Ensure we don't end up with https://app.snowcity.blr//uploads
   const cleanBase = base.replace(/\/$/, '');
   const cleanPath = String(ticketPath).startsWith('/') ? ticketPath : `/${ticketPath}`;
 

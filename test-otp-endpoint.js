@@ -5,7 +5,7 @@
 
 const http = require('http');
 
-const BASE_URL = 'app.snowcityblr.com';
+const BASE_URL = 'https://app.snowcity.blr';
 
 function makeRequest(method, path, data = null) {
   return new Promise((resolve, reject) => {

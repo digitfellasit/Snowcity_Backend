@@ -59,7 +59,7 @@ require = function (id) {
   }
   if (id === '../config/messaging') {
     return {
-      APP_URL: 'app.snowcityblr.com',
+      APP_URL: 'https://app.snowcity.blr',
       interakt: {
         apiUrl: 'https://api.interakt.ai/v1/public/message/',
         apiKey: 'test-key',
