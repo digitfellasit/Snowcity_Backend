@@ -32,10 +32,10 @@ const API_PREFIX = ENV === 'sandbox' ? '/apis/pg-sandbox' : '/apis/hermes';
 function normalizeBaseUrl(raw, fallback) {
   const input = typeof raw === 'string' ? raw : '';
   const parts = input.split(',').map(v => v.trim()).filter(Boolean);
-  return (parts[0] || fallback || 'https://app.snowcity.blr').replace(/\/+$/, '');
+  return (parts[0] || fallback || 'https://app.snowcityblr.com').replace(/\/+$/, '');
 }
-const APP_URL = normalizeBaseUrl(process.env.APP_URL, 'https://app.snowcity.blr');
-const CLIENT_URL = (process.env.CLIENT_URL || 'https://app.snowcity.blr').replace(/\/+$/, '');
+const APP_URL = normalizeBaseUrl(process.env.APP_URL, 'https://app.snowcityblr.com');
+const CLIENT_URL = (process.env.CLIENT_URL || 'https://app.snowcityblr.com').replace(/\/+$/, '');
 
 // Callback / redirect URLs
 let callbackUrlCandidate = (process.env.PHONEPE_CALLBACK_URL || '').trim();
@@ -48,7 +48,7 @@ if (!callbackUrlCandidate) {
 const CALLBACK_URL = callbackUrlCandidate;
 const REDIRECT_URL = process.env.PHONEPE_SUCCESS_URL
   ? process.env.PHONEPE_SUCCESS_URL.replace(/\$\{\s*CLIENT_URL\s*\}/gi, CLIENT_URL)
-  : `${CLIENT_URL}/payment-status`;
+  : `${CLIENT_URL}/payment/success`;
 
 // HTTP client (no default auth — we'll add Bearer per-request)
 const http = createHttpClient({ baseURL: BASE_URL, timeout: 20000 });
@@ -150,6 +150,7 @@ async function initiatePayment({
   }
 
   // ── Validate params ──
+  merchantTransactionId = String(merchantTransactionId).trim();
   if (!merchantTransactionId || !amount || !merchantUserId || !mobileNumber) {
     throw new Error('Missing required parameters for PhonePe payment initiation');
   }

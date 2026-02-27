@@ -27,6 +27,7 @@ function mapCombo(row) {
     head_schema: row.head_schema || '',
     body_schema: row.body_schema || '',
     footer_schema: row.footer_schema || '',
+    stop_booking: Boolean(row.stop_booking),
     // Legacy fields for backward compatibility
     attraction_1_id: row.attraction_1_id,
     attraction_2_id: row.attraction_2_id,
@@ -56,7 +57,8 @@ async function createCombo({
   faq_items = [],
   head_schema = '',
   body_schema = '',
-  footer_schema = ''
+  footer_schema = '',
+  stop_booking = false
 }) {
   const client = await pool.connect();
   try {
@@ -67,10 +69,10 @@ async function createCombo({
 
     // Insert combo
     const { rows } = await client.query(
-      `INSERT INTO combos (name, slug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, create_slots, meta_title, short_description, description, faq_items, head_schema, body_schema, footer_schema)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, $12, $13, $14, $15::jsonb, $16, $17, $18)
+      `INSERT INTO combos (name, slug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, create_slots, meta_title, short_description, description, faq_items, head_schema, body_schema, footer_schema, stop_booking)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, $12, $13, $14, $15::jsonb, $16, $17, $18, $19)
        RETURNING *`,
-      [name, finalSlug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, meta_title, short_description, description, JSON.stringify(faq_items || []), head_schema || '', body_schema || '', footer_schema || '']
+      [name, finalSlug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, meta_title, short_description, description, JSON.stringify(faq_items || []), head_schema || '', body_schema || '', footer_schema || '', stop_booking]
     );
 
     const combo = mapCombo(rows[0]);
@@ -93,8 +95,19 @@ async function createCombo({
     await client.query('COMMIT');
 
     // Always create slots automatically for new combos but in background
-    console.log('Backgrounding automatic slots for new combo:', combo.combo_id, 'with', attraction_ids?.length, 'attractions');
-    const defaultSlots = ComboSlotAutoService.generateDefaultSlots(attraction_ids.length);
+    // Query how many attractions have time slots enabled to set correct duration
+    let timeSlotEnabledCount = attraction_ids?.length || 0;
+    try {
+      if (attraction_ids && attraction_ids.length > 0) {
+        const tseRes = await client.query(
+          `SELECT COUNT(*)::int AS cnt FROM attractions WHERE attraction_id = ANY($1) AND time_slot_enabled = true`,
+          [attraction_ids]
+        );
+        timeSlotEnabledCount = tseRes.rows[0]?.cnt || 0;
+      }
+    } catch (_) { /* fallback to total count */ }
+    console.log('Backgrounding automatic slots for new combo:', combo.combo_id, 'with', attraction_ids?.length, 'attractions,', timeSlotEnabledCount, 'time-slot-enabled');
+    const defaultSlots = ComboSlotAutoService.generateDefaultSlots(attraction_ids.length, timeSlotEnabledCount);
     ComboSlotAutoService.generateSlotsForCombo(combo.combo_id, defaultSlots)
       .then(() => console.log('Slot generation completed in background for combo:', combo.combo_id))
       .catch(err => console.error('Background slot generation failed for combo:', combo.combo_id, err));

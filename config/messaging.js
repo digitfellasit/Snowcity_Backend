@@ -2,7 +2,7 @@
 
 
 
-const APP_URL = (process.env.APP_URL || 'https://app.snowcity.blr').replace(/\/+$/, '');
+const APP_URL = (process.env.APP_URL || 'https://app.snowcityblr.com').replace(/\/+$/, '');
 
 const interakt = {
   apiUrl: process.env.INTERAKT_API_URL || process.env.INTERAKT_URL || null,

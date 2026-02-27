@@ -101,18 +101,19 @@ function buildItemsHtml(items = []) {
     });
 
     let slotTime;
-    if (item.slot_start_time && item.slot_end_time) {
-      slotTime = `${formatTime12Hour(item.slot_start_time)} - ${formatTime12Hour(item.slot_end_time)}`;
-      console.log('🔍 DEBUG Email using formatted slot_start_time/end_time:', slotTime);
-    } else if (item.booking_time) {
-      slotTime = formatTime12Hour(item.booking_time);
-      console.log('🔍 DEBUG Email using formatted booking_time:', slotTime);
-    } else if (item.slot_label) {
-      slotTime = item.slot_label;
-      console.log('🔍 DEBUG Email using slot_label:', slotTime);
+    const hasSlotTimes = item.slot_start_time || item.slot_end_time;
+    if (hasSlotTimes) {
+      if (item.slot_start_time && item.slot_end_time) {
+        slotTime = `${formatTime12Hour(item.slot_start_time)} - ${formatTime12Hour(item.slot_end_time)}`;
+      } else if (item.booking_time) {
+        slotTime = formatTime12Hour(item.booking_time);
+      } else if (item.slot_label) {
+        slotTime = item.slot_label;
+      } else {
+        slotTime = 'Open Slot';
+      }
     } else {
-      slotTime = 'Open Slot';
-      console.log('🔍 DEBUG Email using fallback:', slotTime);
+      slotTime = null; // No time slot — will show just date + quantity
     }
 
     const bookingDate = formatDate(item.booking_date);
@@ -122,12 +123,19 @@ function buildItemsHtml(items = []) {
       ? addons.map(addon => `×${addon.quantity || 1} ${addon.title || 'Addon'}`).join(', ')
       : '-';
 
+    // Build the sub-info line: date • [slot time if present] • pax • addons
+    const subInfoParts = [bookingDate];
+    if (slotTime) subInfoParts.push(slotTime);
+    subInfoParts.push(`Pax: ${quantity}`);
+    if (addonsText !== '-') subInfoParts.push(addonsText);
+    const subInfoStr = subInfoParts.join(' • ');
+
     return `
       <div class="item-card">
         <div class="item-meta">
           <div class="item-title">${title}</div>
           <div class="item-details">Booking ID: ${item.booking_id || item.booking_ref || '-'}</div>
-          <div class="item-subinfo">${bookingDate} • ${slotTime} • Pax: ${quantity} • ${addonsText}</div>
+          <div class="item-subinfo">${subInfoStr}</div>
         </div>
         <div class="item-amount">${formatMoney(item.final_amount || item.total_amount)}</div>
       </div>`;

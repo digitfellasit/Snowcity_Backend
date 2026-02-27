@@ -30,8 +30,8 @@ const resolveClientBaseUrl = () => {
     .map((val) => String(val || '').trim())
     .filter(Boolean);
   const fallback = process.env.NODE_ENV === 'production'
-    ? 'https://app.snowcity.blr'
-    : 'https://app.snowcity.blr';
+    ? 'https://app.snowcityblr.com'
+    : 'https://app.snowcityblr.com';
   const base = entries[0] || fallback;
   return base.replace(/\/$/, '');
 };
@@ -42,7 +42,7 @@ const resolveAppBaseUrl = () => {
     .split(',')
     .map((val) => String(val || '').trim())
     .filter(Boolean);
-  const fallback = process.env.APP_PUBLIC_URL || 'https://app.snowcity.blr';
+  const fallback = process.env.APP_PUBLIC_URL || 'https://app.snowcityblr.com';
   const base = entries[0] || fallback;
   return base.replace(/\/$/, '');
 };

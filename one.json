@@ -4,7 +4,7 @@
   "values": [
     {
       "key": "BASE_URL",
-      "value": "https://app.snowcity.blr",
+      "value": "https://app.snowcityblr.com",
       "type": "text",
       "enabled": true
     },

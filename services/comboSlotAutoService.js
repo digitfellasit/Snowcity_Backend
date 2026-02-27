@@ -14,7 +14,7 @@ class ComboSlotAutoService {
    */
   static async generateSlotsForCombo(comboId, slotsData = [], attractionCount = 2) {
     console.log('generateSlotsForCombo called with:', { comboId, slotsDataLength: slotsData?.length, attractionCount });
-    
+
     if (!slotsData || slotsData.length === 0) {
       console.log('No slots data provided, generating default slots...');
       // Generate default slots if none provided
@@ -31,7 +31,7 @@ class ComboSlotAutoService {
         // Generate a unique slot code
         const slotCode = `${comboId}-${slot.start_date}-${slot.start_time.replace(':', '')}`;
         console.log(`Inserting slot: ${slotCode}`, slot);
-        
+
         await client.query(
           `INSERT INTO combo_slots 
            (combo_id, combo_slot_code, start_date, end_date, start_time, end_time, capacity, price, available)
@@ -68,12 +68,16 @@ class ComboSlotAutoService {
    * Generate default time slots for all days (next 90 days) from 10:00 AM to 8:00 PM
    * @param {number} attractionCount - Number of attractions (determines slot duration)
    */
-  static generateDefaultSlots(attractionCount = 2) {
+  static generateDefaultSlots(attractionCount = 2, timeSlotEnabledCount = null) {
     const slots = [];
     const startHour = 10; // 10:00 AM
     const endHour = 20;   // 8:00 PM
-    const slotDuration = attractionCount; // hours per slot
-    
+    // Duration = number of time-slot-enabled attractions (each gets 1hr)
+    // If all disabled or not specified, use 1hr as minimum
+    const slotDuration = (timeSlotEnabledCount != null && timeSlotEnabledCount > 0)
+      ? timeSlotEnabledCount
+      : Math.max(1, attractionCount);
+
     // Generate for next 90 days
     const startDate = new Date();
     const endDate = new Date();
@@ -83,12 +87,12 @@ class ComboSlotAutoService {
 
     while (current <= endDate) {
       const dateStr = current.toISOString().slice(0, 10);
-      
+
       // Generate continuous slots throughout the day
       for (let hour = startHour; hour + slotDuration <= endHour; hour++) {
         const startTime = `${hour.toString().padStart(2, '0')}:00`;
         const endTime = `${(hour + slotDuration).toString().padStart(2, '0')}:00`;
-        
+
         slots.push({
           start_date: dateStr,
           end_date: dateStr,
@@ -98,10 +102,10 @@ class ComboSlotAutoService {
           available: true
         });
       }
-      
+
       current.setDate(current.getDate() + 1);
     }
-    
+
     return slots;
   }
 

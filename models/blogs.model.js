@@ -159,8 +159,12 @@ async function updateBlog(blog_id, fields = {}) {
   const sets = [];
   const params = [];
   entries.forEach(([k, v], idx) => {
+    let val = v;
+    if (['faq_items', 'gallery', 'bulk_images'].includes(k) && Array.isArray(val)) {
+      val = JSON.stringify(val);
+    }
     sets.push(`${k} = $${idx + 1}`);
-    params.push(v);
+    params.push(val);
   });
   params.push(blog_id);
 

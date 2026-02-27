@@ -169,8 +169,16 @@ async function drawConsolidatedTicket(doc, data) {
     doc.fillColor(COLORS.primary).font('Helvetica-Bold').fontSize(12)
       .text(`${index + 1}. ${itemTitle}${typeLabel}`, margin + 20, yPos + 10);
 
-    doc.fillColor(COLORS.lightText).font('Helvetica').fontSize(10)
-      .text(`Date: ${dateStr}   |   Slot: ${slotStr}`, margin + 20, yPos + 30);
+    // Show slot time only if time slot data exists, otherwise just date
+    const hasSlotTimes = item.slot_start_time || item.slot_end_time || item.start_time || item.end_time;
+    if (hasSlotTimes) {
+      const slotStr = getSlotDisplay(item);
+      doc.fillColor(COLORS.lightText).font('Helvetica').fontSize(10)
+        .text(`Date: ${dateStr}   |   Slot: ${slotStr}`, margin + 20, yPos + 30);
+    } else {
+      doc.fillColor(COLORS.lightText).font('Helvetica').fontSize(10)
+        .text(`Date: ${dateStr}   |   Qty: ${item.quantity || 1}`, margin + 20, yPos + 30);
+    }
 
     let currentY = yPos + 45;
 

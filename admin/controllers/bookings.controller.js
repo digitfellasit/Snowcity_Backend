@@ -76,16 +76,18 @@ exports.listBookings = async function listBookings(req, res, next) {
     const comboTitleExpr = `COALESCE(NULLIF(CONCAT_WS(' + ', NULLIF(a1.title, ''), NULLIF(a2.title, '')), ''), CONCAT('Combo #', c.combo_id::text))`;
     const itemTitleExpr = `CASE WHEN b.item_type = 'Combo' THEN ${comboTitleExpr} ELSE a.title END`;
 
-    // ── Search (ref, user name, email, phone) ──
+    // ── Search (ref, order_ref, user name, email, phone) ──
     if (search && search.trim()) {
       const term = `%${search.trim()}%`;
       where.push(`(
         b.booking_ref ILIKE $${i}
+        OR ord.order_ref ILIKE $${i}
         OR u.name ILIKE $${i}
         OR u.email ILIKE $${i}
         OR u.phone ILIKE $${i}
         OR a.title ILIKE $${i}
         OR CAST(b.booking_id AS TEXT) = $${i + 1}
+        OR CAST(b.order_id AS TEXT) = $${i + 1}
       )`);
       params.push(term, search.trim());
       i += 2;
@@ -196,11 +198,16 @@ exports.listBookings = async function listBookings(req, res, next) {
       LEFT JOIN attractions a1 ON a1.attraction_id = c.attraction_1_id
       LEFT JOIN attractions a2 ON a2.attraction_id = c.attraction_2_id
       LEFT JOIN offers o ON o.offer_id = b.offer_id
+      LEFT JOIN orders ord ON ord.order_id = b.order_id
     `;
 
     const dataSql = `
       SELECT
         b.*,
+        ord.order_ref,
+        ord.payment_mode AS order_payment_mode,
+        ord.payment_ref AS order_payment_ref,
+        ord.payment_txn_no AS order_payment_txn_no,
         u.name AS user_name,
         u.email AS user_email,
         u.phone AS user_phone,
@@ -235,8 +242,6 @@ exports.listBookings = async function listBookings(req, res, next) {
     console.timeEnd('BookingsList DB Queries');
     console.log(`BookingsList: Fetched ${rowsRes.rows.length} rows, total ${countRes.rows[0]?.count || 0}`);
 
-    // ... rest of the function ...
-
     // Get addons for all bookings in one query
     const bookingIds = rowsRes.rows.map(row => row.booking_id);
     let addonsMap = {};
@@ -263,15 +268,71 @@ exports.listBookings = async function listBookings(req, res, next) {
       }, {});
     }
 
-    // Build bookings with addons
-    const bookings = rowsRes.rows.map(bookingRow => ({
-      ...bookingRow,
-      addons: addonsMap[bookingRow.booking_id] || []
+    // Group bookings by order_id for consolidated view
+    const orderMap = new Map();
+    for (const row of rowsRes.rows) {
+      const key = row.order_id || row.booking_id;
+      if (!orderMap.has(key)) {
+        orderMap.set(key, {
+          order_id: row.order_id,
+          order_ref: row.order_ref || row.booking_ref,
+          user_name: row.user_name,
+          user_email: row.user_email,
+          user_phone: row.user_phone,
+          booking_date: row.booking_date,
+          payment_status: row.payment_status,
+          booking_status: row.booking_status,
+          payment_mode: row.order_payment_mode || row.payment_mode,
+          payment_ref: row.order_payment_ref || row.payment_ref,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          total_amount: 0,
+          final_amount: 0,
+          items: [],
+        });
+      }
+      const orderGroup = orderMap.get(key);
+      const itemTitle = row.item_title || row.attraction_title || row.combo_title || 'Ticket';
+      orderGroup.items.push({
+        booking_id: row.booking_id,
+        booking_ref: row.booking_ref,
+        item_type: row.item_type,
+        item_title: itemTitle,
+        attraction_title: row.attraction_title,
+        combo_title: row.combo_title,
+        quantity: row.quantity,
+        total_amount: Number(row.total_amount || 0),
+        final_amount: Number(row.final_amount || row.total_amount || 0),
+        discount_amount: Number(row.discount_amount || 0),
+        booking_status: row.booking_status,
+        payment_status: row.payment_status,
+        slot_start_time: row.slot_start_time,
+        slot_end_time: row.slot_end_time,
+        slot_label: row.slot_label,
+        offer_title: row.offer_title,
+        ticket_pdf: row.ticket_pdf,
+        whatsapp_sent: row.whatsapp_sent,
+        email_sent: row.email_sent,
+        addons: addonsMap[row.booking_id] || [],
+      });
+      orderGroup.total_amount += Number(row.total_amount || 0);
+      orderGroup.final_amount += Number(row.final_amount || row.total_amount || 0);
+    }
+
+    // Flatten to array and build combined item_title
+    const grouped = Array.from(orderMap.values()).map(order => ({
+      ...order,
+      item_title: order.items.map(it => it.item_title).filter(Boolean).join(', '),
+      item_count: order.items.length,
+      quantity: order.items.reduce((s, it) => s + (it.quantity || 1), 0),
+      // Keep first booking_id for compatibility
+      booking_id: order.items[0]?.booking_id,
+      booking_ref: order.items[0]?.booking_ref,
     }));
 
     const total = Number(countRes.rows[0]?.count || 0);
     res.json({
-      data: bookings,
+      data: grouped,
       meta: { page: p, limit: l, total, totalPages: Math.max(1, Math.ceil(total / l) || 1) },
     });
   } catch (err) {
@@ -287,41 +348,157 @@ exports.getBookingById = async function getBookingById(req, res, next) {
     }
     const comboTitleExpr = `COALESCE(NULLIF(CONCAT_WS(' + ', NULLIF(a1.title, ''), NULLIF(a2.title, '')), ''), CONCAT('Combo #', c.combo_id::text))`;
     const itemTitleExpr = `CASE WHEN b.item_type = 'Combo' THEN ${comboTitleExpr} ELSE a.title END`;
-    const detailSql = `
+
+    // First try to find as booking_id, then as order_id
+    let orderId = null;
+    const bookingCheck = await pool.query('SELECT order_id FROM bookings WHERE booking_id = $1', [id]);
+    if (bookingCheck.rows.length) {
+      orderId = bookingCheck.rows[0].order_id;
+    } else {
+      // Maybe it's an order_id directly
+      const orderCheck = await pool.query('SELECT order_id FROM orders WHERE order_id = $1', [id]);
+      if (orderCheck.rows.length) {
+        orderId = id;
+      } else {
+        return res.status(404).json({ error: 'Booking not found' });
+      }
+    }
+
+    // Fetch order details
+    const orderRes = await pool.query(
+      `SELECT o.*, u.name AS user_name, u.email AS user_email, u.phone AS user_phone
+       FROM orders o
+       LEFT JOIN users u ON u.user_id = o.user_id
+       WHERE o.order_id = $1`, [orderId]
+    );
+    if (!orderRes.rows.length) return res.status(404).json({ error: 'Order not found' });
+    const order = orderRes.rows[0];
+
+    // Fetch all bookings (items) in this order
+    const itemsSql = `
       SELECT
         b.*,
-        u.name AS user_name,
-        u.email AS user_email,
-        u.phone AS user_phone,
         a.title AS attraction_title,
         ${comboTitleExpr} AS combo_title,
         ${itemTitleExpr} AS item_title,
-        o.title AS offer_title,
-        COALESCE(s.start_time, cs.start_time) AS slot_start_time,
-        COALESCE(s.end_time, cs.end_time)   AS slot_end_time
+        o2.title AS offer_title,
+        b.slot_start_time,
+        b.slot_end_time,
+        b.slot_label
       FROM bookings b
-      LEFT JOIN users u ON u.user_id = b.user_id
       LEFT JOIN attractions a ON a.attraction_id = b.attraction_id
       LEFT JOIN combos c ON c.combo_id = b.combo_id
       LEFT JOIN attractions a1 ON a1.attraction_id = c.attraction_1_id
       LEFT JOIN attractions a2 ON a2.attraction_id = c.attraction_2_id
-      LEFT JOIN offers o ON o.offer_id = b.offer_id
-      LEFT JOIN attraction_slots s ON s.slot_id = b.slot_id
-      LEFT JOIN combo_slots cs ON cs.combo_slot_id = b.combo_slot_id
-      WHERE b.booking_id = $1
+      LEFT JOIN offers o2 ON o2.offer_id = b.offer_id
+      WHERE b.order_id = $1 AND b.parent_booking_id IS NULL
+      ORDER BY b.created_at ASC
     `;
-    const { rows } = await pool.query(detailSql, [id]);
-    const row = rows[0];
-    if (!row) return res.status(404).json({ error: 'Booking not found' });
+    const itemsRes = await pool.query(itemsSql, [orderId]);
+
+    // Fetch addons for all items
+    const bookingIds = itemsRes.rows.map(r => r.booking_id);
+    let addonsMap = {};
+    if (bookingIds.length > 0) {
+      const addonsRes = await pool.query(
+        `SELECT ba.booking_id, ba.*, ad.title AS addon_title, ad.description AS addon_description
+         FROM booking_addons ba
+         JOIN addons ad ON ad.addon_id = ba.addon_id
+         WHERE ba.booking_id = ANY($1)
+         ORDER BY ba.booking_id, ad.title ASC`,
+        [bookingIds]
+      );
+      addonsMap = addonsRes.rows.reduce((map, addon) => {
+        if (!map[addon.booking_id]) map[addon.booking_id] = [];
+        map[addon.booking_id].push({
+          booking_addon_id: addon.booking_addon_id,
+          addon_id: addon.addon_id,
+          quantity: addon.quantity,
+          price: addon.price,
+          title: addon.addon_title,
+          description: addon.addon_description
+        });
+        return map;
+      }, {});
+    }
+
+    const items = itemsRes.rows.map(row => ({
+      booking_id: row.booking_id,
+      booking_ref: row.booking_ref,
+      item_type: row.item_type,
+      item_title: row.item_title || row.attraction_title || row.combo_title || 'Ticket',
+      attraction_title: row.attraction_title,
+      combo_title: row.combo_title,
+      quantity: row.quantity,
+      total_amount: Number(row.total_amount || 0),
+      final_amount: Number(row.final_amount || row.total_amount || 0),
+      discount_amount: Number(row.discount_amount || 0),
+      booking_status: row.booking_status,
+      payment_status: row.payment_status,
+      booking_date: row.booking_date,
+      slot_start_time: row.slot_start_time,
+      slot_end_time: row.slot_end_time,
+      slot_label: row.slot_label,
+      offer_title: row.offer_title,
+      ticket_pdf: row.ticket_pdf,
+      whatsapp_sent: row.whatsapp_sent,
+      email_sent: row.email_sent,
+      addons: addonsMap[row.booking_id] || [],
+      created_at: row.created_at,
+    }));
+
+    // Fetch activity log
+    const activityRes = await pool.query(
+      `SELECT * FROM booking_activity_log
+       WHERE order_id = $1
+       ORDER BY created_at ASC`,
+      [orderId]
+    );
 
     // Scope check
     const scopes = req.user.scopes || {};
     const attractionScope = scopes.attraction || [];
-    if (row.attraction_id && attractionScope.length && !attractionScope.includes('*') && !attractionScope.includes(Number(row.attraction_id))) {
-      return res.status(403).json({ error: 'Forbidden: attraction not in scope' });
+    for (const item of itemsRes.rows) {
+      if (item.attraction_id && attractionScope.length && !attractionScope.includes('*') && !attractionScope.includes(Number(item.attraction_id))) {
+        return res.status(403).json({ error: 'Forbidden: attraction not in scope' });
+      }
     }
 
-    res.json(row);
+    // Calculate totals
+    const totalAmount = items.reduce((s, it) => s + it.total_amount, 0);
+    const finalAmount = items.reduce((s, it) => s + it.final_amount, 0);
+
+    res.json({
+      order_id: order.order_id,
+      order_ref: order.order_ref,
+      user: {
+        user_id: order.user_id,
+        name: order.user_name,
+        email: order.user_email,
+        phone: order.user_phone,
+      },
+      payment: {
+        status: order.payment_status,
+        mode: order.payment_mode,
+        ref: order.payment_ref,
+        txn_no: order.payment_txn_no,
+        total: totalAmount,
+        paid: finalAmount,
+      },
+      booking_date: items[0]?.booking_date || order.created_at,
+      booking_status: items[0]?.booking_status || 'Booked',
+      items,
+      activity: activityRes.rows.map(log => ({
+        log_id: log.log_id,
+        event_type: log.event_type,
+        event_detail: log.event_detail,
+        old_value: log.old_value,
+        new_value: log.new_value,
+        created_at: log.created_at,
+      })),
+      created_at: order.created_at,
+      updated_at: order.updated_at,
+    });
   } catch (err) {
     next(err);
   }
@@ -403,8 +580,24 @@ exports.updateBooking = async function updateBooking(req, res, next) {
   try {
     const id = Number(req.params.id);
 
-    // Load current and scope-check
-    const current = await bookingsModel.getBookingById(id);
+    // Try to find as booking_id first, then as order_id
+    let current = await bookingsModel.getBookingById(id);
+    let resolvedBookingId = id;
+    let resolvedOrderId = current?.order_id || null;
+
+    if (!current) {
+      // Maybe it's an order_id — find first booking in that order
+      const orderCheck = await pool.query(
+        'SELECT booking_id, order_id FROM bookings WHERE order_id = $1 ORDER BY booking_id ASC LIMIT 1',
+        [id]
+      );
+      if (orderCheck.rows.length) {
+        resolvedBookingId = orderCheck.rows[0].booking_id;
+        resolvedOrderId = orderCheck.rows[0].order_id;
+        current = await bookingsModel.getBookingById(resolvedBookingId);
+      }
+    }
+
     if (!current) return res.status(404).json({ error: 'Booking not found' });
 
     const scopes = req.user.scopes || {};
@@ -438,22 +631,41 @@ exports.updateBooking = async function updateBooking(req, res, next) {
       payload[k] = value;
     }
 
-    console.log('🔍 DEBUG admin update payload:', payload);
+    console.log('🔍 DEBUG admin update payload:', payload, { resolvedBookingId, resolvedOrderId });
 
     // Optional guard: require payment_ref if marking Completed
     if (payload.payment_status === 'Completed' && !payload.payment_ref) {
       return res.status(400).json({ error: 'payment_ref is required for Completed payments' });
     }
 
-    const updated = await bookingsModel.updateBooking(id, payload);
+    // If propagate: update ALL bookings in the order in one query
+    if (req.body.propagate && payload.booking_status && resolvedOrderId) {
+      try {
+        const result = await pool.query(
+          `UPDATE bookings SET booking_status = $1, updated_at = NOW()
+           WHERE order_id = $2
+           RETURNING booking_id`,
+          [payload.booking_status, resolvedOrderId]
+        );
+        console.log(`✅ Propagated booking_status="${payload.booking_status}" to ${result.rowCount} bookings in order_id=${resolvedOrderId}`);
+      } catch (propErr) {
+        console.error('Failed to propagate status:', propErr?.message || propErr);
+      }
+      // Re-fetch the updated booking to return
+      const updated = await bookingsModel.getBookingById(resolvedBookingId);
+      return res.json(updated);
+    }
+
+    // Non-propagating update: single booking only
+    const updated = await bookingsModel.updateBooking(resolvedBookingId, payload);
     if (!updated) return res.status(404).json({ error: 'Booking not found' });
 
     if (payload.payment_status === 'Completed') {
       // PDF generated on-the-fly when needed — no file storage
       try {
-        const sent = await interaktService.sendTicketForBooking(id);
+        const sent = await interaktService.sendTicketForBooking(resolvedBookingId);
         if (sent && sent.success) {
-          await bookingsModel.updateBooking(id, { whatsapp_sent: true });
+          await bookingsModel.updateBooking(resolvedBookingId, { whatsapp_sent: true });
         }
       } catch (e) {
         console.error('Failed to send WhatsApp ticket (updateBooking):', e?.message || e);

@@ -88,14 +88,14 @@ async function testDatabaseConnection() {
     const axios = require('axios');
 
     // Test a simple API call
-    const response = await axios.get('https://app.snowcity.blr/api/combos');
+    const response = await axios.get('https://app.snowcityblr.com/api/combos');
     console.log('   ✅ API Connection: OK');
     console.log('   Combos found:', response.data?.data?.length || 0);
 
     // Test combo slots
     if (response.data?.data?.length > 0) {
       const comboId = response.data.data[0].combo_id || response.data.data[0].id;
-      const slotsResponse = await axios.get(`https://app.snowcity.blr/api/combos/${comboId}/slots?date=2025-11-29`);
+      const slotsResponse = await axios.get(`https://app.snowcityblr.com/api/combos/${comboId}/slots?date=2025-11-29`);
       console.log('   Combo slots found:', slotsResponse.data?.data?.length || 0);
 
       if (slotsResponse.data?.data?.length > 0) {

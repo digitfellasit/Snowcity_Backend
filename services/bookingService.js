@@ -450,9 +450,15 @@ async function computeTotals(item = {}) {
   let offer = null;
   let offerId = null;
 
+  // Prior-date offer logic: offers/happy hours only apply for advance bookings
+  // (booking date must be strictly after today for offer pricing to apply)
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const isPriorDateBooking = onDate > todayStr; // booking for a future date
+
   // Try dynamic pricing service first (to support weekend/holiday rules + offers)
+  // Only apply offers for prior-date (advance) bookings
   let appliedDynamic = false;
-  if (dynamicPricingService && dynamicPricingService.calculateDynamicPrice) {
+  if (isPriorDateBooking && dynamicPricingService && dynamicPricingService.calculateDynamicPrice) {
     try {
       // Calculate dynamic price (adjustments + discounts)
       const pricingResult = await dynamicPricingService.calculateDynamicPrice({
@@ -497,7 +503,8 @@ async function computeTotals(item = {}) {
   }
 
   // Fallback to legacy offer pricing if dynamic failed or service missing/not applied
-  if (!appliedDynamic) {
+  // Only for prior-date (advance) bookings
+  if (!appliedDynamic && isPriorDateBooking) {
     const pricing = await applyOfferPricing({
       targetType: item_type === 'Combo' ? 'combo' : 'attraction',
       targetId: item_type === 'Combo' ? item.combo_id : item.attraction_id,
@@ -588,6 +595,25 @@ async function createBookings(payload) {
   // Pre-calculation loop
   for (const item of items) {
     const normalized = await resolveSubjectIds(item);
+
+    // Stop-booking guard: check if attraction or combo has booking stopped
+    const itemType = normalized.item_type || (normalized.combo_id ? 'Combo' : 'Attraction');
+    if (itemType === 'Combo' && normalized.combo_id) {
+      const combo = await combosModel.getComboById(normalized.combo_id);
+      if (combo && combo.stop_booking) {
+        const e = new Error(`Booking is temporarily unavailable for "${combo.name || 'this combo'}"`);
+        e.status = 400;
+        throw e;
+      }
+    } else if (normalized.attraction_id) {
+      const attraction = await attractionsModel.getAttractionById(normalized.attraction_id);
+      if (attraction && attraction.stop_booking) {
+        const e = new Error(`Booking is temporarily unavailable for "${attraction.title || 'this attraction'}"`);
+        e.status = 400;
+        throw e;
+      }
+    }
+
     const lineTotals = await computeTotals(normalized);
     grossBeforeDiscount += lineTotals.total_amount;
     offerDiscountTotal += lineTotals.discount_amount;
@@ -662,7 +688,7 @@ async function createBookings(payload) {
                (order_id, user_id, item_type, attraction_id, combo_id, slot_id, combo_slot_id,
                 offer_id, quantity, booking_date, total_amount, discount_amount, payment_status,
                 slot_start_time, slot_end_time, slot_label)
-               VALUES ($1, $2, $3::booking_item_type, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'Pending', $13::time, $14::time, $15)
+               VALUES ($1, $2, $3::booking_item_type, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'Pending', $13, $14, $15)
                RETURNING *`,
         [
           orderId, userId, itemType, attractionId, comboId, slotId, comboSlotId,
@@ -676,8 +702,8 @@ async function createBookings(payload) {
       // Insert Addons
       for (const a of pItem.addons) {
         await client.query(
-          `INSERT INTO booking_addons (booking_id, addon_id, quantity, price)
-                   VALUES ($1, $2, $3, $4)`,
+          `INSERT INTO booking_addons(booking_id, addon_id, quantity, price)
+      VALUES($1, $2, $3, $4)`,
           [booking.booking_id, a.addon_id, a.quantity, a.price]
         );
       }
@@ -717,7 +743,7 @@ async function initiatePayPhiPayment({ bookingId, email, mobile, amount: fronten
   }
 
   // Generate unique merchantTxnNo for each payment attempt to avoid duplicates
-  const merchantTxnNo = `ORD${order.order_ref}_${Date.now()}`;
+  const merchantTxnNo = `${order.order_ref}_${Date.now()}`;
 
   // Use the frontend-supplied amount as the authoritative payment amount.
   // The frontend calculates from the same price sources and has been verified correct.
@@ -844,7 +870,7 @@ async function initiatePhonePePayment({ bookingId, email, mobile, amount: fronte
     const e = new Error('Payment already completed'); e.status = 400; throw e;
   }
 
-  const merchantTxnNo = `ORD_${orderId}_${Math.floor(Date.now() / 1000)}`;
+  const merchantTxnNo = `${order.order_ref}_${Math.floor(Date.now() / 1000)}`;
 
   // Use the frontend-supplied amount as the authoritative payment amount.
   const amount = Number(frontendAmount);
@@ -880,7 +906,7 @@ async function initiatePhonePePayment({ bookingId, email, mobile, amount: fronte
     raw = result.raw;
   } catch (phonepeErr) {
     console.error('[PhonePe] Payment initiation failed:', phonepeErr.message || phonepeErr);
-    const e = new Error(`PhonePe payment initiation failed: ${phonepeErr.message || 'Unknown error'}`);
+    const e = new Error(`PhonePe payment initiation failed: ${phonepeErr.message || 'Unknown error'} `);
     e.status = phonepeErr.status || 502;
     throw e;
   }

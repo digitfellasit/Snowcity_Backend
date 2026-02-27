@@ -1,13 +1,13 @@
 const DEFAULT_ORIGINS = [
-  'https://app.snowcity.blr',
-  'https://app.snowcity.blr',
+  'https://app.snowcityblr.com',
+  'https://app.snowcityblr.com',
   'https://snowcity.vercel.app/',
   'https://snowcity.vercel.app',
-  'http://127.0.0.1:5173',
-  'https://app.snowcity.blr',
+  'https://snowcity.vercel.app',
+  'https://app.snowcityblr.com',
   'https://snowcity.vercel.app',
   'https://qa.phicommerce.com',
-  'https://app.snowcity.blr'
+  'https://app.snowcityblr.com'
 ];
 
 const parseOrigins = () => {

@@ -24,12 +24,14 @@ async function createAttraction(payload) {
     head_schema = '',
     body_schema = '',
     footer_schema = '',
+    time_slot_enabled = true,
+    stop_booking = false,
   } = payload;
 
   const { rows } = await pool.query(
     `INSERT INTO attractions
-     (title, slug, description, image_url, image_alt, desktop_image_url, desktop_image_alt, gallery, base_price, price_per_hour, discount_percent, active, badge, video_url, slot_capacity, meta_title, short_description, faq_items, head_schema, body_schema, footer_schema)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19, $20, $21)
+     (title, slug, description, image_url, image_alt, desktop_image_url, desktop_image_alt, gallery, base_price, price_per_hour, discount_percent, active, badge, video_url, slot_capacity, meta_title, short_description, faq_items, head_schema, body_schema, footer_schema, time_slot_enabled, stop_booking)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19, $20, $21, $22, $23)
      RETURNING *`,
     [
       title,
@@ -53,17 +55,23 @@ async function createAttraction(payload) {
       head_schema || '',
       body_schema || '',
       footer_schema || '',
+      time_slot_enabled,
+      stop_booking,
     ]
   );
 
   const attraction = rows[0];
 
-  // Always create slots automatically for new attractions but in background
-  console.log('Backgrounding automatic slots for new attraction:', attraction.attraction_id);
-  const defaultSlots = AttractionSlotAutoService.generateDefaultSlots(1); // 1-hour slots for attractions
-  AttractionSlotAutoService.generateSlotsForAttraction(attraction.attraction_id, defaultSlots)
-    .then(() => console.log('Slot generation completed in background for attraction:', attraction.attraction_id))
-    .catch(err => console.error('Background slot generation failed for attraction:', attraction.attraction_id, err));
+  // Only create slots automatically for attractions with time slots enabled
+  if (time_slot_enabled) {
+    console.log('Backgrounding automatic slots for new attraction:', attraction.attraction_id);
+    const defaultSlots = AttractionSlotAutoService.generateDefaultSlots(1); // 1-hour slots for attractions
+    AttractionSlotAutoService.generateSlotsForAttraction(attraction.attraction_id, defaultSlots)
+      .then(() => console.log('Slot generation completed in background for attraction:', attraction.attraction_id))
+      .catch(err => console.error('Background slot generation failed for attraction:', attraction.attraction_id, err));
+  } else {
+    console.log('Skipping slot generation for attraction (time slots disabled):', attraction.attraction_id);
+  }
 
   return attraction;
 }
