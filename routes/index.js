@@ -26,7 +26,6 @@ router.use('/uploads', cachePublic(3600), require('./uploads.routes'));         
 router.use('/tickets', require('./ticketsvirtual.routes'));
 router.use('/', require('./gallery.public'));
 router.use('/', require('./pages.public'));
-router.use('/', require('./blogs.public'));
 router.use('/social', require('./instagram.routes'));
 router.use('/track', require('./tracking.routes'));
 router.use('/site-settings', cachePublic(1800), require('./siteSettings.routes')); // 30 min

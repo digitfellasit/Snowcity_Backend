@@ -143,13 +143,14 @@ async function listBlogs({ active = null, q = '', limit = 50, offset = 0, blogId
 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const { rows } = await pool.query(
-    `SELECT * FROM blogs
+    `SELECT *, COUNT(*) OVER() as total_count FROM blogs
      ${whereSql}
-     ORDER BY created_at DESC
+     ORDER BY created_at ASC
      LIMIT $${i} OFFSET $${i + 1}`,
     [...params, limit, offset]
   );
-  return rows.map(mapBlog);
+  const totalCount = rows.length > 0 ? parseInt(rows[0].total_count, 10) : 0;
+  return { items: rows.map(mapBlog), totalCount };
 }
 
 async function updateBlog(blog_id, fields = {}) {

@@ -10,8 +10,19 @@ exports.listBlogs = async (req, res, next) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit || '20', 10), 1), 100);
     const offset = (page - 1) * limit;
 
-    const data = await blogService.list({ active, q, limit, offset });
-    res.json({ data, meta: { page, limit, count: data.length } });
+    const { items, totalCount } = await blogService.list({ active, q, limit, offset });
+    const totalPages = Math.ceil(totalCount / limit);
+
+    res.json({
+      data: items,
+      meta: {
+        totalCount,
+        totalPages,
+        page,
+        limit,
+        hasMore: page < totalPages
+      }
+    });
   } catch (err) {
     next(err);
   }

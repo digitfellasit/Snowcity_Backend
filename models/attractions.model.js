@@ -111,7 +111,13 @@ async function listAttractions({ search = '', active = null, limit = 50, offset 
   const { rows } = await pool.query(
     `SELECT * FROM attractions
      ${whereSql}
-     ORDER BY created_at DESC
+     ORDER BY 
+       CASE 
+         WHEN title ILIKE '%Snow Park%' OR title ILIKE '%Snow City%' THEN 1 
+         WHEN title ILIKE '%Mad Lab%' THEN 2 
+         ELSE 3 
+       END, 
+       created_at ASC
      LIMIT $${i} OFFSET $${i + 1}`,
     [...params, limit, offset]
   );

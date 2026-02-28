@@ -8,12 +8,12 @@ exports.listCombos = async (req, res, next) => {
     const scopes = req.user.scopes || {};
     const comboScope = scopes.combo || [];
     const hasFullAccess = !comboScope.length || comboScope.includes('*');
-    
+
     console.log('=== COMBOS LIST DEBUG ===');
     console.log('User scopes:', scopes);
     console.log('Combo scope:', comboScope);
     console.log('Has full access:', hasFullAccess);
-    
+
     if (!hasFullAccess) {
       // If no full access, enforce list filter
       const scopedIds = comboScope.length ? comboScope : [null]; // null yields empty
@@ -57,33 +57,57 @@ exports.createCombo = async (req, res, next) => {
     }
     console.log('=== COMBO CREATION START ===');
     console.log('Request body:', req.body);
-    
+
     const {
       name,
+      slug,
       attraction_ids,
       attraction_prices,
       total_price,
       image_url,
+      image_alt,
+      desktop_image_url,
+      desktop_image_alt,
       discount_percent = 0,
       active = true,
-      create_slots = true
+      create_slots = true,
+      meta_title,
+      short_description,
+      description,
+      faq_items,
+      head_schema,
+      body_schema,
+      footer_schema,
+      stop_booking
     } = req.body || {};
-    
+
     console.log('Parsed data:', { name, attraction_ids, attraction_prices, total_price, image_url, discount_percent, active, create_slots });
-    
+
     // Validate that we have the required new format or fall back to legacy
     if (name && attraction_ids && attraction_prices) {
       console.log('Using NEW format for combo creation');
       // New format - slots are generated automatically if create_slots is true
       const row = await combosModel.createCombo({
         name,
+        slug,
         attraction_ids,
         attraction_prices,
         total_price,
         image_url,
+        image_alt,
+        desktop_image_url,
+        desktop_image_alt,
         discount_percent,
         active,
-        create_slots
+        create_slots,
+        meta_title,
+        short_description,
+        description,
+        faq_items,
+        head_schema,
+        body_schema,
+        footer_schema,
+        stop_booking
       });
       console.log('Combo created successfully:', row);
       res.status(201).json(row);
@@ -93,13 +117,13 @@ exports.createCombo = async (req, res, next) => {
       if (!attraction_1_id || !attraction_2_id) {
         return res.status(400).json({ error: 'Legacy format requires attraction_1_id and attraction_2_id' });
       }
-      
+
       const legacyAttractionIds = [attraction_1_id, attraction_2_id];
       const legacyAttractionPrices = {
         [attraction_1_id]: combo_price / 2,
         [attraction_2_id]: combo_price / 2
       };
-      
+
       const row = await combosModel.createCombo({
         name: `Combo #${Date.now()}`,
         attraction_ids: legacyAttractionIds,
@@ -126,11 +150,11 @@ exports.updateCombo = async (req, res, next) => {
       return res.status(403).json({ error: 'Forbidden: combo not in scope' });
     }
     const updateData = { ...req.body };
-    
+
     // Handle legacy format updates
     if (updateData.attraction_1_id || updateData.attraction_2_id) {
       const { attraction_1_id, attraction_2_id, combo_price, ...otherFields } = updateData;
-      
+
       // Convert legacy to new format
       if (attraction_1_id && attraction_2_id) {
         updateData.attraction_ids = [attraction_1_id, attraction_2_id];
@@ -140,13 +164,13 @@ exports.updateCombo = async (req, res, next) => {
         };
         updateData.total_price = combo_price;
       }
-      
+
       // Remove legacy fields
       delete updateData.attraction_1_id;
       delete updateData.attraction_2_id;
       delete updateData.combo_price;
     }
-    
+
     const row = await combosModel.updateCombo(id, updateData);
     if (!row) return res.status(404).json({ error: 'Combo not found' });
     res.json(row);

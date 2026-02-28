@@ -157,7 +157,13 @@ async function listCombos({ active = null, comboIds = null } = {}) {
     `SELECT cd.*
      FROM combo_details cd
      ${whereSql}
-     ORDER BY cd.created_at DESC`,
+     ORDER BY 
+       CASE 
+         WHEN cd.name ILIKE '%Snow Park%' OR cd.name ILIKE '%Snow City%' THEN 1 
+         WHEN cd.name ILIKE '%Mad Lab%' THEN 2 
+         ELSE 3 
+       END, 
+       cd.created_at ASC`,
     params
   );
   return rows.map(mapCombo);

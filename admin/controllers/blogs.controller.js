@@ -19,12 +19,12 @@ async function listBlogs(req, res, next) {
     if (!blogScope.includes('*')) {
       // If no full access, enforce list filter
       const scopedIds = blogScope.length ? blogScope : [null];
-      const data = await blogsModel.listBlogs({ active, q, limit, offset, blogIds: scopedIds });
-      return res.json({ data, meta: { page, limit, count: data.length } });
+      const { items, totalCount } = await blogsModel.listBlogs({ active, q, limit, offset, blogIds: scopedIds });
+      return res.json({ data: items, meta: { page, limit, totalCount } });
     }
 
-    const data = await blogsModel.listBlogs({ active, q, limit, offset });
-    res.json({ data, meta: { page, limit, count: data.length } });
+    const { items, totalCount } = await blogsModel.listBlogs({ active, q, limit, offset });
+    res.json({ data: items, meta: { page, limit, totalCount } });
   } catch (err) {
     next(err);
   }

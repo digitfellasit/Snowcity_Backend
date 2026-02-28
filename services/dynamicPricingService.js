@@ -105,7 +105,7 @@ async function getApplicableRules({ itemType, itemId, date, time, holidays = [] 
       AND (r.specific_date IS NULL OR r.specific_date = $1)
       AND (r.specific_time IS NULL OR $4::time = r.specific_time)
       AND (
-        o.rule_type IN ('dynamic_pricing', 'date_slot_pricing', 'happy_hour')
+        o.rule_type IN ('dynamic_pricing', 'date_slot_pricing', 'happy_hour', 'weekday_special')
         OR o.rule_type IS NULL
       )
     ORDER BY r.priority ASC, o.created_at DESC
@@ -128,7 +128,7 @@ async function getApplicableRules({ itemType, itemId, date, time, holidays = [] 
     }
 
     // Then check day type matching (for dynamic pricing and happy hour rules)
-    if (rule.rule_type === 'dynamic_pricing' || rule.rule_type === 'happy_hour') {
+    if (rule.rule_type === 'dynamic_pricing' || rule.rule_type === 'happy_hour' || rule.rule_type === 'weekday_special') {
       return matchesDayRule(rule, date, holidays);
     }
 

@@ -113,7 +113,7 @@ async function replaceOfferRules(offer_id, rules = []) {
       rule?.slot_id ?? rule?.slotId ?? null,
       rule?.rule_discount_type ?? rule?.ruleDiscountType ?? null,
       rule?.rule_discount_value ?? rule?.ruleDiscountValue ?? null,
-      Number(rule?.priority ?? 100),
+      100, // Fixed default priority
       (rule?.day_type ?? rule?.dayType ?? null) || null,
       rule?.specific_days ?? rule?.specificDays ?? null,
       !!rule?.is_holiday,
@@ -349,6 +349,7 @@ async function findApplicableOfferRule({
         )
       AND (
            r.specific_days IS NULL
+        OR array_length(r.specific_days::int[], 1) IS NULL
         OR (EXTRACT(DOW FROM $9::date)) = ANY(r.specific_days::int[])
         )
      ORDER BY r.priority DESC, r.rule_id DESC

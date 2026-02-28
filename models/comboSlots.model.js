@@ -5,10 +5,10 @@ function generateDynamicComboSlots(date, combo, existingBookings = []) {
   const slots = [];
   const startHour = 10; // 10:00 AM
   const endHour = 20;   // 8:00 PM
-  
+
   // Calculate slot duration based on number of attractions (1 hour per attraction)
   const slotDurationHours = combo.attraction_count || 2; // Default 2 hours for combo
-  
+
   // Convert existing bookings to a Set for quick lookup
   const bookedSlots = new Set();
   existingBookings.forEach(booking => {
@@ -17,14 +17,14 @@ function generateDynamicComboSlots(date, combo, existingBookings = []) {
       bookedSlots.add(hour);
     }
   });
-  
+
   for (let hour = startHour; hour <= endHour - slotDurationHours; hour++) {
     const startTime = `${String(hour).padStart(2, '0')}:00:00`;
     const endTime = `${String(hour + slotDurationHours).padStart(2, '0')}:00:00`;
-    
+
     // Check if this slot is already booked
     const isBooked = bookedSlots.has(hour);
-    
+
     slots.push({
       combo_slot_id: `${date.replace(/-/g, '')}-${hour}`, // Virtual slot ID
       combo_id: combo.combo_id,
@@ -42,7 +42,7 @@ function generateDynamicComboSlots(date, combo, existingBookings = []) {
       is_dynamic: true
     });
   }
-  
+
   return slots;
 }
 
@@ -50,24 +50,31 @@ function generateDynamicComboSlots(date, combo, existingBookings = []) {
 async function getComboDetails(combo_id) {
   const { rows } = await pool.query(
     `SELECT cd.*, 
+            (SELECT COUNT(*)::int 
+             FROM attractions a 
+             WHERE a.attraction_id = ANY(cd.attraction_ids) 
+               AND a.time_slot_enabled = true) as time_slot_enabled_count,
             CASE 
               WHEN cd.attraction_ids IS NOT NULL THEN array_length(cd.attraction_ids, 1)
               WHEN cd.attraction_1_id IS NOT NULL AND cd.attraction_2_id IS NOT NULL THEN 2
               WHEN cd.attraction_1_id IS NOT NULL THEN 1
               ELSE 2 -- Default to 2 for backward compatibility
-            END as attraction_count
+            END as total_attraction_count
      FROM combo_details cd 
      WHERE cd.combo_id = $1`,
     [combo_id]
   );
-  
+
   const combo = rows[0] || null;
-  
-  // Ensure minimum of 2 for existing combos
-  if (combo && combo.attraction_count < 2) {
-    combo.attraction_count = 2;
+
+  if (combo) {
+    if (combo.time_slot_enabled_count > 0) {
+      combo.attraction_count = combo.time_slot_enabled_count;
+    } else {
+      combo.attraction_count = 1; // Default to 1 hour if no slots enabled, instead of minimal 2 hours
+    }
   }
-  
+
   return combo;
 }
 
@@ -99,7 +106,7 @@ async function listSlots({ combo_id = null, date = null, start_date = null, end_
     // Get combo details
     const combo = await getComboDetails(combo_id);
     if (!combo) return [];
-    
+
     // Get existing bookings for this combo and date
     const { rows: bookings } = await pool.query(
       `SELECT booking_date, booking_time 
@@ -107,23 +114,23 @@ async function listSlots({ combo_id = null, date = null, start_date = null, end_
        WHERE combo_id = $1 AND booking_date = $2 AND booking_status <> 'Cancelled'`,
       [combo_id, date]
     );
-    
+
     const slots = generateDynamicComboSlots(date, combo, bookings);
     return slots;
   }
-  
+
   // If date range is requested, generate for each date
   if (start_date && end_date && combo_id) {
     const combo = await getComboDetails(combo_id);
     if (!combo) return [];
-    
+
     const allSlots = [];
     const currentDate = new Date(start_date);
     const endDate = new Date(end_date);
-    
+
     while (currentDate <= endDate) {
       const dateStr = currentDate.toISOString().slice(0, 10);
-      
+
       // Get existing bookings for this combo and date
       const { rows: bookings } = await pool.query(
         `SELECT booking_date, booking_time 
@@ -131,16 +138,16 @@ async function listSlots({ combo_id = null, date = null, start_date = null, end_
          WHERE combo_id = $1 AND booking_date = $2 AND booking_status <> 'Cancelled'`,
         [combo_id, dateStr]
       );
-      
+
       const daySlots = generateDynamicComboSlots(dateStr, combo, bookings);
       allSlots.push(...daySlots);
-      
+
       currentDate.setDate(currentDate.getDate() + 1);
     }
-    
+
     return allSlots;
   }
-  
+
   // Fallback to database for existing physical slots (backward compatibility)
   const where = [];
   const params = [];
@@ -227,8 +234,8 @@ async function updateSlot(combo_slot_id, fields = {}) {
     const cast = ['start_date', 'end_date'].includes(key)
       ? '::date'
       : ['start_time', 'end_time'].includes(key)
-      ? '::time'
-      : '';
+        ? '::time'
+        : '';
     sets.push(`${key} = $${idx + 1}${cast}`);
     params.push(val);
   });
