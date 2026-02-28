@@ -527,8 +527,11 @@ async function computeTotals(item = {}) {
   const { addonsTotal, normalized } = await normalizeAddons(item.addons || []);
   const preDiscount = baseTicketsTotal + addonsTotal;
 
-  const discount_amount = offerDiscountTotal;
-  const total_amount = preDiscount; // Gross
+  const discount_amount = Math.max(0, offerDiscountTotal);
+  // If offerDiscountTotal is negative, it represents a price increase (surcharge)
+  // We add the absolute value of the surcharge to the gross total
+  const surcharge = Math.max(0, -offerDiscountTotal);
+  const total_amount = preDiscount + surcharge; // Adjusted Gross
   const final_amount = Math.max(0, total_amount - discount_amount); // Net
 
   console.log('🔍 computeTotals FINAL:', {
