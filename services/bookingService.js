@@ -849,7 +849,7 @@ async function checkPayPhiStatus(orderId) {
 
     // Send WhatsApp ticket for the entire order
     try {
-      await interaktService.sendTicketForOrder(order.order_id);
+      await interaktService.sendTicketForOrder(order.order_id, { force: true });
     } catch (err) {
       console.error('Failed to send WhatsApp ticket for order', err);
     }
@@ -992,7 +992,7 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
 
     // Send WhatsApp ticket for the entire order
     try {
-      await interaktService.sendTicketForOrder(order.order_id);
+      await interaktService.sendTicketForOrder(order.order_id, { force: true });
     } catch (err) {
       console.error('Failed to send WhatsApp ticket for order', err);
     }

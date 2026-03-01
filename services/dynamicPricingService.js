@@ -199,6 +199,18 @@ async function calculateDynamicPrice({ itemType, itemId, basePrice, date, time, 
   }
 
   // No dynamic pricing rules, apply normal offers logic
+  // But same-day bookings should NOT get offers — only future dates
+  const todayStr = new Date().toISOString().slice(0, 10);
+  if (dateStr <= todayStr) {
+    return {
+      originalPrice: effectiveBasePrice,
+      finalPrice: effectiveBasePrice,
+      discountAmount: 0,
+      appliedRules: [],
+      totalPrice: effectiveBasePrice * quantity
+    };
+  }
+
   const rules = await getApplicableRules({ itemType, itemId, date, time, holidays });
 
   if (!rules.length) {

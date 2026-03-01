@@ -141,24 +141,34 @@ function generateOtp() {
 }
 
 async function sendOtp({ user_id = null, email = null, phone = null, name = null, channel = 'sms', createIfNotExists = false, whatsapp_consent = false }) {
-  // Resolve user — phone is the unique identifier, so prioritize phone lookup
   let user = null;
   if (user_id) {
     user = await usersModel.getUserById(user_id);
-  } else if (phone) {
-    // Phone is unique — check by phone first
-    const row = await pool.query(`SELECT * FROM users WHERE phone = $1`, [phone]);
-    user = row.rows[0] || null;
-  }
-
-  // If not found by phone, try by email as fallback
-  if (!user && email) {
+  } else if (email) {
+    // Email is now the primary unique identifier
     const row = await pool.query(`SELECT * FROM users WHERE email = $1`, [email]);
     user = row.rows[0] || null;
   }
 
-  // If user exists (found by phone), update their email/name if different
-  if (user && phone) {
+  // If not found by email, try by phone
+  if (!user && phone) {
+    const row = await pool.query(`SELECT * FROM users WHERE phone = $1`, [phone]);
+    const phoneMatches = row.rows;
+
+    if (phoneMatches.length > 0) {
+      if (email) {
+        // If we have an email but user wasn't found by it, 
+        // find a user with this phone who has NO email yet (adoption case)
+        user = phoneMatches.find(u => !u.email) || null;
+      } else {
+        // If no email provided, just take the first match for the phone
+        user = phoneMatches[0];
+      }
+    }
+  }
+
+  // Update user details if different
+  if (user) {
     const updates = [];
     const values = [];
     let paramIdx = 1;
@@ -166,7 +176,12 @@ async function sendOtp({ user_id = null, email = null, phone = null, name = null
     if (email && user.email !== email) {
       updates.push(`email = $${paramIdx++}`);
       values.push(email);
-      logger.info('Updating user email for existing phone', { user_id: user.user_id, oldEmail: user.email, newEmail: email });
+      logger.info('Updating user email', { user_id: user.user_id, oldEmail: user.email, newEmail: email });
+    }
+    if (phone && user.phone !== phone) {
+      updates.push(`phone = $${paramIdx++}`);
+      values.push(phone);
+      logger.info('Updating user phone', { user_id: user.user_id, oldPhone: user.phone, newPhone: phone });
     }
     if (name && name.trim() && user.name !== name.trim()) {
       updates.push(`name = $${paramIdx++}`);
@@ -215,7 +230,7 @@ async function sendOtp({ user_id = null, email = null, phone = null, name = null
   }
 
   const otp = FIXED_TEST_OTP || generateOtp();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min
 
   await pool.query(
     `UPDATE users SET otp_code = $1, otp_expires_at = $2, updated_at = NOW() WHERE user_id = $3`,
@@ -241,7 +256,8 @@ async function sendOtp({ user_id = null, email = null, phone = null, name = null
   if (!FIXED_TEST_OTP) {
     if (smsPhone) {
       logger.info('Sending OTP SMS', { phone: smsPhone });
-      await sendSMS({ to: smsPhone, body: `Your OTP is ${otp} IMMSMS` });
+      const message = `${otp} is your OTP to continue on Snowcity Blr. OTP is confidential. Do not share it with anyone.`;
+      await sendSMS({ to: smsPhone, body: message });
     } else if (channel === 'email' && user.email) {
       // Fallback: send to email if no phone available at all
       logger.info('No phone available, falling back to email OTP', { email: user.email });

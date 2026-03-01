@@ -15,13 +15,39 @@ async function applyOfferPricing({
   const base = toNumber(baseAmount, 0);
   const normalizedTargetId = targetId == null ? null : Number(targetId);
   const normalizedSlotId = slotId == null ? null : Number(slotId);
-  
+
+  // ── Same-day blocking: offers only apply for future dates ──────────
+  const todayStr = new Date().toISOString().slice(0, 10);
+  if (booking_date && booking_date <= todayStr) {
+    return { unit: base, discount: 0, discount_percent: 0, offer: null };
+  }
+  // ───────────────────────────────────────────────────────────────────
+
   // Dynamic import to avoid circular dependency
   const offersModel = require('../models/offers.model');
-  
+
   if (!offersModel?.findApplicableOfferRule || !targetType || !targetId || base <= 0) {
     return { unit: base, discount: 0, discount_percent: 0, offer: null };
   }
+
+  // ── Dynamic Pricing Override ──────────────────────────────────────
+  // If dynamic pricing rules exist for this target + date, skip all offers.
+  if (booking_date && targetId != null) {
+    try {
+      const dynamicPricingModel = require('../models/dynamicPricing.model');
+      const dpRules = await dynamicPricingModel.getApplicableRules(
+        targetType,
+        Number(targetId),
+        booking_date,
+      );
+      if (Array.isArray(dpRules) && dpRules.length > 0) {
+        return { unit: base, discount: 0, discount_percent: 0, offer: null };
+      }
+    } catch (_) {
+      // silently continue if model unavailable
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────
 
   const match = await offersModel.findApplicableOfferRule({
     targetType,

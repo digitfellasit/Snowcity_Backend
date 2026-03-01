@@ -1,0 +1,35 @@
+﻿[dotenv@17.2.3] injecting env (74) from .env -- tip: ΓÜÖ∩╕Å  write to custom object with { processEnv: myObject }
+Attractions: [
+  {
+    "attraction_id": "7",
+    "title": "Snow Park",
+    "base_price": "650.00"
+  },
+  {
+    "attraction_id": "19",
+    "title": "Arcade Games",
+    "base_price": "250.00"
+  },
+  {
+    "attraction_id": "8",
+    "title": "Madlabs",
+    "base_price": "500.00"
+  },
+  {
+    "attraction_id": "9",
+    "title": "Eyelusion",
+    "base_price": "300.00"
+  },
+  {
+    "attraction_id": "15",
+    "title": "AR Zoo",
+    "base_price": "100.00"
+  },
+  {
+    "attraction_id": "16",
+    "title": "Devil's Dark House",
+    "base_price": "150.00"
+  }
+]
+[33mwarn[39m: CITEXT extension enable failed (non-fatal) {"err":"Connection terminated","service":"snowcity-api","timestamp":"2026-03-01T13:20:22.947Z"}
+[32minfo[39m: PostgreSQL connected {"database":"snowcity","host":"database-1.cf4cq0uc02xu.ap-south-1.rds.amazonaws.com","poolMax":20,"port":5432,"service":"snowcity-api","ssl":true,"timestamp":"2026-03-01T13:20:22.955Z","user":"postgres"}

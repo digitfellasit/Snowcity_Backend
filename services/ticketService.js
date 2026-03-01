@@ -12,26 +12,52 @@ const s3Service = require('./storage/s3Service');
 
 // ---------- Configuration ----------
 const ASSET_DIR = path.resolve(__dirname, '../utils');
-const TICKET_BG = path.join(ASSET_DIR, 'ticket/ticket-bg.png');
-const LOGO_PATH = path.join(ASSET_DIR, 'logo.png');
+const LOGO_PATH = path.join(ASSET_DIR, 'loading.png');  // Snowman mascot
+const BG_PATH = path.join(ASSET_DIR, 'ticket', 'ticket-bg.png');
 
-// Wonderla-style vibrant colors
-const COLORS = {
-  primary: '#0056D2',    // Deep Blue
-  secondary: '#00A8E8',  // Cyan
-  accent: '#FFC107',     // Amber/Yellow
-  text: '#333333',
+// ── Color Palette ──────────────────────────────────────────────────
+const C = {
+  bannerStart: '#0099FF',  // Deep blue gradient start
+  bannerEnd: '#1A8FE3',  // Light blue gradient end
+  footerBg: '#0099FF',  // Dark navy footer
+  accent: '#F57C00',  // Orange for total
+  snowPark: '#1565C0',  // Blue
+  madlabs: '#7B1FA2',  // Purple
+  eyelusion: '#00897B',  // Teal
+  defaultColor: '#1565C0',  // Fallback blue
+  text: '#222222',
   lightText: '#666666',
+  veryLight: '#999999',
   white: '#FFFFFF',
-  border: '#DDDDDD'
+  infoBg: '#E3F2FD',  // Light sky-blue info box background
+  cardBorder: '#E0E0E0',
+  pageBg: '#FFFFFF',
 };
 
-// Helpers
-const exists = (p) => { try { return p && fs.existsSync(p); } catch { return false; } };
-const money = (n) => `Rs. ${Number(n || 0).toFixed(2)}`;
-const fmtDate = (d) => dayjs(d).format('DD MMM, YYYY');
+// ── Attraction color map ───────────────────────────────────────────
+const ATTRACTION_COLORS = {
+  'snow park': C.snowPark,
+  'snowpark': C.snowPark,
+  'madlabs': C.madlabs,
+  'mad labs': C.madlabs,
+  'eyelusion': C.eyelusion,
+  'eye lusion': C.eyelusion,
+};
 
-// Helper: Format time '14:30:00' -> '2:30 PM'
+function getAttractionColor(title) {
+  const lower = (title || '').toLowerCase().trim();
+  for (const [key, color] of Object.entries(ATTRACTION_COLORS)) {
+    if (lower.includes(key)) return color;
+  }
+  return C.defaultColor;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────
+const exists = (p) => { try { return p && fs.existsSync(p); } catch { return false; } };
+const money = (n) => `Rs. ${Number(n || 0).toLocaleString('en-IN')}`;
+const fmtDate = (d) => dayjs(d).format('ddd, D MMM YYYY');
+const fmtDateShort = (d) => dayjs(d).format('DD MMM YYYY');
+
 function formatTime(t) {
   if (!t) return '';
   const timeStr = String(t).split(' ')[0];
@@ -45,37 +71,48 @@ function formatTime(t) {
   return `${h12}:${minute.toString().padStart(2, '0')} ${ampm}`;
 }
 
-// Helper: Get Slot String
 function getSlotDisplay(row) {
   const start = formatTime(row.slot_start_time);
   const end = formatTime(row.slot_end_time);
-  if (start && end) return `${start} - ${end}`;
-
+  if (start && end) return `${start} – ${end}`;
   const legacyStart = formatTime(row.start_time);
   const legacyEnd = formatTime(row.end_time);
-  if (legacyStart && legacyEnd) return `${legacyStart} - ${legacyEnd}`;
-
+  if (legacyStart && legacyEnd) return `${legacyStart} – ${legacyEnd}`;
   const bookingTime = formatTime(row.booking_time);
   if (bookingTime) return bookingTime;
-
   return row.slot_label || 'Open Entry';
 }
 
-// ---------- Data Fetching (Order-Centric) ----------
+// ── Data Fetching (Order-Centric) ──────────────────────────────────
 
 async function getFullOrderData(bookingId) {
-  // 1. Find the Order ID for this booking
   const orderRes = await pool.query(
     `SELECT order_id FROM bookings WHERE booking_id = $1`,
     [bookingId]
   );
-
   if (!orderRes.rows.length) return null;
   const orderId = orderRes.rows[0].order_id;
 
-  // 2. Use canonical model helper
   const order = await bookingsModel.getOrderWithDetails(orderId);
   if (!order) return null;
+
+  // Fetch guest info from users table
+  let guestName = 'Guest';
+  let guestPhone = '';
+  let guestEmail = '';
+  if (order.user_id) {
+    try {
+      const userRes = await pool.query(
+        `SELECT name, phone, email FROM users WHERE user_id = $1`,
+        [order.user_id]
+      );
+      if (userRes.rows.length) {
+        guestName = userRes.rows[0].name || 'Guest';
+        guestPhone = userRes.rows[0].phone || '';
+        guestEmail = userRes.rows[0].email || '';
+      }
+    } catch (_) { /* silently continue */ }
+  }
 
   const items = (order.items || [])
     .filter((item) => !item.parent_booking_id)
@@ -93,200 +130,294 @@ async function getFullOrderData(bookingId) {
     discountAmount: order.discount_amount || 0,
     couponCode: order.coupon_code || null,
     orderDate: order.created_at,
-    items
+    guestName,
+    guestPhone,
+    guestEmail,
+    items,
   };
 }
 
-// ---------- Drawing Logic ----------
+// ── Drawing Logic ──────────────────────────────────────────────────
 
 async function drawConsolidatedTicket(doc, data) {
-  const { orderRef, items, totalAmount, discountAmount, couponCode } = data;
-  const pageWidth = doc.page.width;
-  const pageHeight = doc.page.height;
-  const margin = 20;
+  const { orderRef, items, totalAmount, discountAmount, couponCode, guestName, guestPhone, guestEmail, orderDate } = data;
+  const PW = doc.page.width;   // Page width
+  const PH = doc.page.height;  // Page height
+  const M = 40;                // Margins
 
-  // 1. Background / Branding
-  if (exists(TICKET_BG)) {
-    doc.image(TICKET_BG, 0, 0, { width: pageWidth, height: pageHeight });
-  } else {
-    doc.rect(0, 0, pageWidth, 90).fill(COLORS.primary);
-    doc.rect(0, pageHeight - 40, pageWidth, 40).fill(COLORS.secondary);
+  // ═══════════════════════════════════════════════════════════════
+  // 1. HEADER BANNER (Blue gradient with logo)
+  // ═══════════════════════════════════════════════════════════════
+  const bannerH = 140;
+
+  // Draw gradient by layering thin horizontal strips
+  const gradSteps = 60;
+  for (let i = 0; i < gradSteps; i++) {
+    const ratio = i / gradSteps;
+    const r1 = 11, g1 = 96, b1 = 176;    // #0B60B0
+    const r2 = 26, g2 = 143, b2 = 227;   // #1A8FE3
+    const r = Math.round(r1 + (r2 - r1) * ratio);
+    const g = Math.round(g1 + (g2 - g1) * ratio);
+    const b = Math.round(b1 + (b2 - b1) * ratio);
+    const stripH = bannerH / gradSteps;
+    doc.rect(0, i * stripH, PW, stripH + 1).fill(`rgb(${r}, ${g}, ${b})`);
   }
 
-  // Logo
-  if (exists(LOGO_PATH)) {
-    doc.image(LOGO_PATH, margin + 10, 15, { width: 80 });
-  } else {
-    doc.font('Helvetica-Bold').fontSize(24).fillColor(COLORS.white)
-      .text('SNOW CITY', margin + 20, 35);
+  // Draw background image if exists
+  if (exists(BG_PATH)) {
+    doc.image(BG_PATH, 0, 0, { width: PW, height: PH });
   }
 
-  // Header Info
-  doc.font('Helvetica-Bold').fontSize(14).fillColor(COLORS.white)
-    .text('ORDER RECEIPT & E-TICKET', 0, 25, { align: 'right', width: pageWidth - margin });
-
-  doc.font('Helvetica').fontSize(10).fillColor('#E0E0E0')
-    .text(`Ref: ${orderRef}`, 0, 45, { align: 'right', width: pageWidth - margin });
-
-  // 2. Item List Container
-  let yPos = 110;
-
-  doc.fillColor(COLORS.text);
-  doc.font('Helvetica-Bold').fontSize(14).text('YOUR BOOKINGS', margin + 10, yPos);
-  doc.rect(margin + 10, yPos + 18, pageWidth - (margin * 2) - 20, 2).fill(COLORS.accent);
-
-  yPos += 35;
-
-  // 3. Iterate Items
-  doc.font('Helvetica').fontSize(10);
-
-  items.forEach((item, index) => {
-    if (yPos > pageHeight - 150) {
-      doc.addPage();
-      yPos = 50;
-    }
-
-    const slotStr = getSlotDisplay(item);
-    const dateStr = fmtDate(item.booking_date);
-    const itemTitle = item.item_title.toUpperCase();
-    const typeLabel = item.item_type === 'Combo' ? ' [COMBO PACKAGE]' : '';
-
-    let itemHeight = 55;
-    if (item.addons && item.addons.length > 0) {
-      itemHeight += item.addons.length * 12 + 10;
-    }
-    if (item.offer) {
-      itemHeight += 25;
-    }
-
-    // Item Box Background
-    doc.save();
-    doc.roundedRect(margin + 10, yPos, pageWidth - (margin * 2) - 150, itemHeight, 5)
-      .fillAndStroke('#F9F9F9', '#EEEEEE');
-    doc.restore();
-
-    // Item Text
-    doc.fillColor(COLORS.primary).font('Helvetica-Bold').fontSize(12)
-      .text(`${index + 1}. ${itemTitle}${typeLabel}`, margin + 20, yPos + 10);
-
-    // Show slot time only if time slot data exists, otherwise just date
-    const hasSlotTimes = item.slot_start_time || item.slot_end_time || item.start_time || item.end_time;
-    if (hasSlotTimes) {
-      const slotStr = getSlotDisplay(item);
-      doc.fillColor(COLORS.lightText).font('Helvetica').fontSize(10)
-        .text(`Date: ${dateStr}   |   Slot: ${slotStr}`, margin + 20, yPos + 30);
-    } else {
-      doc.fillColor(COLORS.lightText).font('Helvetica').fontSize(10)
-        .text(`Date: ${dateStr}   |   Qty: ${item.quantity || 1}`, margin + 20, yPos + 30);
-    }
-
-    let currentY = yPos + 45;
-
-    // Show addons if present
-    if (item.addons && item.addons.length > 0) {
-      doc.fillColor(COLORS.text).font('Helvetica-Bold').fontSize(9)
-        .text('Add-ons:', margin + 20, currentY);
-      currentY += 12;
-
-      item.addons.forEach((addon) => {
-        const addonText = `• ${addon.title} x${addon.quantity} (${money(addon.price * addon.quantity)})`;
-        doc.fillColor(COLORS.lightText).font('Helvetica').fontSize(8)
-          .text(addonText, margin + 25, currentY);
-        currentY += 10;
-      });
-      currentY += 5;
-    }
-
-    // Show offer details if present
-    if (item.offer) {
-      doc.fillColor(COLORS.secondary).font('Helvetica-Bold').fontSize(9)
-        .text(`Offer: ${item.offer.title}`, margin + 20, currentY);
-      currentY += 12;
-
-      let offerText = '';
-      if (item.offer.rule_type === 'buy_x_get_y' && item.offer.buy_qty && item.offer.get_qty) {
-        offerText = `Buy ${item.offer.buy_qty} Get ${item.offer.get_qty}`;
-        if (item.offer.get_discount_type === 'percent' && item.offer.get_discount_value) {
-          offerText += ` (${item.offer.get_discount_value}% off)`;
-        } else if (item.offer.get_discount_type === 'amount' && item.offer.get_discount_value) {
-          offerText += ` (${money(item.offer.get_discount_value)} off)`;
-        } else {
-          offerText += ' Free';
-        }
-      } else if (item.offer.discount_type === 'percent') {
-        offerText = `${item.offer.discount_percent}% discount`;
-      } else if (item.offer.discount_type === 'amount') {
-        offerText = `${money(item.offer.discount_value)} off`;
-      }
-
-      if (offerText) {
-        doc.fillColor(COLORS.lightText).font('Helvetica').fontSize(8)
-          .text(offerText, margin + 25, currentY);
-      }
-    }
-
-    // Qty Badge
-    doc.save();
-    doc.circle(pageWidth - 180, yPos + 27, 18).fill(COLORS.accent);
-    doc.fillColor(COLORS.text).font('Helvetica-Bold').fontSize(10)
-      .text(item.quantity, pageWidth - 195, yPos + 22, { width: 30, align: 'center' });
-    doc.fontSize(7).text('PAX', pageWidth - 195, yPos + 33, { width: 30, align: 'center' });
-    doc.restore();
-
-    yPos += itemHeight + 10;
-  });
-
-  // 4. QR Code Area (Right Side)
-  const qrSize = 110;
-  const qrX = pageWidth - margin - qrSize - 10;
-  const qrY = 110;
-
+  // Large watermark text "SNOW CITY" in faint white
   doc.save();
-  doc.roundedRect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 30, 5).strokeColor(COLORS.border).stroke();
+  doc.font('Helvetica-Bold').fontSize(64).fillColor(C.white).opacity(0.08)
+    .text('SNOW CITY', 0, 45, { width: PW, align: 'center' });
   doc.restore();
 
-  try {
-    const qrString = JSON.stringify({ type: 'ORDER', ref: orderRef, count: items.length });
-    const qrBuf = Buffer.from(
-      (await QRCode.toDataURL(qrString, { margin: 0, width: qrSize, color: { dark: COLORS.primary } })).split(',')[1],
-      'base64'
-    );
-    doc.image(qrBuf, qrX, qrY, { width: qrSize, height: qrSize });
-  } catch (e) { }
+  // Wavy snow bottom edge simulation
+  doc.save();
+  doc.rect(0, bannerH - 15, PW, 20).fill(C.pageBg);
+  // Add slight curve illusion with overlapping circles
+  for (let x = -10; x < PW + 20; x += 30) {
+    doc.circle(x, bannerH - 10, 18).fill(C.pageBg);
+  }
+  doc.restore();
 
-  doc.fontSize(8).fillColor(COLORS.lightText)
-    .text('Scan for Entry', qrX, qrY + qrSize + 5, { width: qrSize, align: 'center' });
-
-  // 5. Totals & Footer
-  const bottomY = pageHeight - 80;
-
-  // Show discount if any
-  if (discountAmount && Number(discountAmount) > 0) {
-    doc.font('Helvetica').fontSize(10).fillColor(COLORS.lightText)
-      .text(`Discount: -${money(discountAmount)}`, margin + 20, bottomY - 35);
-    if (couponCode) {
-      doc.text(`Coupon: ${couponCode}`, margin + 250, bottomY - 35);
-    }
+  // Logo (snowman mascot) – top left
+  if (exists(LOGO_PATH)) {
+    doc.image(LOGO_PATH, M, 12, { width: 70 });
   }
 
-  doc.font('Helvetica-Bold').fontSize(16).fillColor(COLORS.primary)
-    .text(`TOTAL PAID: ${money(totalAmount)}`, margin + 20, bottomY - 20);
+  // Booking ID & Order Date (top-right)
+  const rightX = PW - M;
+  doc.font('Helvetica').fontSize(8).fillColor(C.white).opacity(0.7)
+    .text('BOOKING ID', rightX - 160, 25, { width: 160, align: 'right' });
+  doc.opacity(1);
+  doc.font('Helvetica-Bold').fontSize(16).fillColor(C.white)
+    .text(orderRef || '', rightX - 160, 36, { width: 160, align: 'right' });
+  doc.font('Helvetica').fontSize(9).fillColor(C.white).opacity(0.7)
+    .text(`Order Date: ${fmtDateShort(orderDate)}`, rightX - 160, 57, { width: 160, align: 'right' });
+  doc.opacity(1);
 
-  doc.fontSize(8).fillColor('#888')
-    .text('Non-refundable. Valid only for the date/slot specified.', margin + 20, bottomY + 10);
-  doc.text('www.snowcity.com | +91-9876543210', margin + 20, bottomY + 22);
+  // ═══════════════════════════════════════════════════════════════
+  // 2. GUEST INFORMATION SECTION
+  // ═══════════════════════════════════════════════════════════════
+  let y = bannerH + 10;
+
+  doc.font('Helvetica-Bold').fontSize(12).fillColor(C.bannerStart)
+    .text('Below is a summary of your booking', M, y);
+  y += 22;
+
+  // Guest Name & Contact
+  doc.font('Helvetica').fontSize(10).fillColor(C.lightText)
+    .text('Guest Name', M, y);
+  doc.font('Helvetica-Bold').fontSize(11).fillColor(C.text)
+    .text(guestName, M + 100, y);
+  y += 18;
+
+  if (guestPhone) {
+    doc.font('Helvetica').fontSize(10).fillColor(C.lightText)
+      .text('Contact', M, y);
+    doc.font('Helvetica-Bold').fontSize(11).fillColor(C.text)
+      .text(guestPhone, M + 100, y);
+    y += 18;
+  }
+
+  // Thin separator line
+  doc.moveTo(M, y + 2).lineTo(PW - M, y + 2).strokeColor(C.cardBorder).lineWidth(0.5).stroke();
+  y += 14;
+
+  // ═══════════════════════════════════════════════════════════════
+  // 3. ATTRACTION / BOOKING CARDS (Color-coded)
+  // ═══════════════════════════════════════════════════════════════
+  items.forEach((item) => {
+    const cardH = 95;
+
+    // Check if we need a new page
+    if (y + cardH > PH - 220) {
+      doc.addPage();
+      y = M;
+    }
+
+    const title = item.item_title || 'Booking';
+    const color = getAttractionColor(title);
+    const slotStr = getSlotDisplay(item);
+    const dateStr = fmtDate(item.booking_date);
+    const qty = Number(item.quantity || 1);
+    const typeLabel = item.item_type === 'Combo' ? ' (Combo)' : '';
+
+    // Left color bar
+    doc.rect(M, y, 4, cardH).fill(color);
+
+    // Card background
+    doc.save();
+    doc.rect(M + 4, y, PW - (M * 2) - 4, cardH).fill('#FAFAFA');
+    doc.rect(M + 4, y, PW - (M * 2) - 4, cardH).strokeColor(C.cardBorder).lineWidth(0.5).stroke();
+    doc.restore();
+
+    // Attraction title header bar
+    doc.rect(M + 4, y, PW - (M * 2) - 4, 26).fill(color);
+    doc.font('Helvetica-Bold').fontSize(11).fillColor(C.white)
+      .text(`${title}${typeLabel}`, M + 14, y + 7);
+
+    // Visit Date
+    const infoY = y + 34;
+    doc.font('Helvetica').fontSize(9).fillColor(C.lightText)
+      .text('Visit Date', M + 14, infoY);
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(C.text)
+      .text(dateStr, M + 14, infoY + 13);
+
+    // Time Slot
+    const hasSlotTimes = item.slot_start_time || item.slot_end_time || item.start_time || item.end_time;
+    if (hasSlotTimes) {
+      doc.font('Helvetica').fontSize(9).fillColor(C.lightText)
+        .text('Time Slot', M + 200, infoY);
+      doc.font('Helvetica-Bold').fontSize(10).fillColor(C.text)
+        .text(slotStr, M + 200, infoY + 13);
+    }
+
+    // Quantity
+    doc.font('Helvetica').fontSize(9).fillColor(C.lightText)
+      .text('Qty', PW - M - 80, infoY);
+    doc.font('Helvetica-Bold').fontSize(14).fillColor(color)
+      .text(String(qty), PW - M - 80, infoY + 11);
+
+    // Info box for Snow Park
+    const lowerTitle = (title || '').toLowerCase();
+    if (lowerTitle.includes('snow park') || lowerTitle.includes('snowpark')) {
+      const infoBoxY = y + cardH;
+      const infoBoxH = 22;
+      doc.rect(M + 4, infoBoxY, PW - (M * 2) - 4, infoBoxH).fill(C.infoBg);
+      doc.font('Helvetica').fontSize(7.5).fillColor('#1565C0')
+        .text('■ Arrive 15 mins early for jacket, boots & gloves • 45 mins snow access', M + 14, infoBoxY + 6);
+      y += infoBoxH;
+    }
+
+    y += cardH + 10;
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // 4. QR CODE
+  // ═══════════════════════════════════════════════════════════════
+  try {
+    const qrBuffer = await QRCode.toBuffer(orderRef || 'SNOWCITY', {
+      margin: 1,
+      width: 100,
+      color: { dark: '#0B60B0', light: '#FFFFFF' }
+    });
+    // Position it in the bottom-right of the banner
+    doc.image(qrBuffer, PW - M - 70, bannerH - 85, { width: 70 });
+
+    doc.font('Helvetica').fontSize(6).fillColor(C.white).opacity(0.8)
+      .text('SCAN TO VERIFY', PW - M - 70, bannerH - 15, { width: 70, align: 'center' });
+    doc.opacity(1);
+  } catch (err) {
+    console.warn('[TicketService] QR Code generation failed:', err);
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // 5. TOTAL AMOUNT
+  // ═══════════════════════════════════════════════════════════════
+  y += 8;
+
+  if (discountAmount && Number(discountAmount) > 0) {
+    doc.font('Helvetica').fontSize(9).fillColor(C.lightText)
+      .text(`Discount: -${money(discountAmount)}`, M, y);
+    if (couponCode) {
+      doc.text(`  (Coupon: ${couponCode})`, M + 130, y);
+    }
+    y += 16;
+  }
+
+  doc.font('Helvetica-Bold').fontSize(18).fillColor(C.accent)
+    .text(`Total Amount: ${money(totalAmount)}`, M, y);
+  y += 30;
+
+  // ═══════════════════════════════════════════════════════════════
+  // 6. TERMS & CONDITIONS
+  // ═══════════════════════════════════════════════════════════════
+  // Check if we need a new page for terms
+  if (y > PH - 230) {
+    doc.addPage();
+    y = M;
+  }
+
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(C.text)
+    .text('Terms and Conditions', M, y);
+  y += 16;
+
+  const terms = [
+    'This ticket is valid only for the date and time slot mentioned above.',
+    'Please arrive at least 15 minutes before your scheduled time slot.',
+    'Late arrivals may result in reduced activity time; no extensions will be provided.',
+    'Tickets are non-transferable and non-refundable once purchased.',
+    'Management reserves the right to refuse entry in case of misconduct.',
+    'Children below 3 years enter free. Children aged 3–12 require a child ticket.',
+    'Photography/videography is subject to park rules and restrictions.',
+    'Snow City is not responsible for loss of personal belongings.',
+    'By entering the premises, you agree to follow all safety guidelines.',
+  ];
+
+  terms.forEach((term, idx) => {
+    doc.font('Helvetica').fontSize(7.5).fillColor(C.lightText)
+      .text(`${idx + 1}. ${term}`, M, y, { width: PW - (M * 2) });
+    y += 12;
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // 7. FOOTER (Dark blue bar)
+  // ═══════════════════════════════════════════════════════════════
+  const footerH = 50;
+  const footerY = PH - footerH;
+
+  doc.rect(0, footerY, PW, footerH).fill(C.footerBg);
+
+  const colW = (PW - M * 2) / 3;
+
+  // Column 1: Visit Us
+  doc.font('Helvetica-Bold').fontSize(7).fillColor(C.white)
+    .text('VISIT US', M, footerY + 10);
+  doc.font('Helvetica').fontSize(6.5).fillColor(C.white).opacity(0.8)
+    .text('fun world complex, Jayamahal Main Rd, Bengaluru', M, footerY + 21);
+  doc.text('Karnataka 560006', M, footerY + 30);
+  doc.opacity(1);
+
+  // Column 2: Website / Park Timings
+  doc.font('Helvetica-Bold').fontSize(7).fillColor(C.white)
+    .text('WEBSITE / PARK TIMINGS', M + colW, footerY + 10);
+  doc.font('Helvetica').fontSize(6.5).fillColor(C.white).opacity(0.8)
+    .text('www.snowcityblr.com', M + colW, footerY + 21);
+  doc.text('10:00 AM – 8:00 PM', M + colW, footerY + 30);
+  doc.opacity(1);
+
+  // Column 3: Contact Us
+  doc.font('Helvetica-Bold').fontSize(7).fillColor(C.white)
+    .text('CONTACT US', M + colW * 2, footerY + 10);
+  doc.font('Helvetica').fontSize(6.5).fillColor(C.white).opacity(0.8)
+    .text('+91 7829550000', M + colW * 2, footerY + 21);
+  doc.text('info@snowcityblr.com', M + colW * 2, footerY + 30);
+  doc.opacity(1);
+
+  // Disclaimer at very bottom
+  doc.font('Helvetica').fontSize(6).fillColor(C.veryLight)
+    .text(
+      'Official E-Ticket | Bengaluru Leisure Private Limited | Do not duplicate or alter',
+      0, footerY + footerH + 4,
+      { width: PW, align: 'center' }
+    );
 }
 
-// ---------- Generate PDF Buffer (no disk storage) ----------
+// ── Generate PDF Buffer (no disk storage) ──────────────────────────
 
 async function generateTicketBuffer(booking_id) {
   const data = await getFullOrderData(booking_id);
   if (!data) throw new Error('Order/Booking not found');
 
   const doc = new PDFDocument({
-    size: [650, 400],
+    size: 'A4',
     margin: 0,
-    autoFirstPage: true
+    autoFirstPage: true,
   });
 
   const chunks = [];
@@ -308,12 +439,12 @@ async function generateTicketBuffer(booking_id) {
   };
 }
 
-// Legacy alias: generateTicket now uploads to S3 and returns the public URL
+// ── Legacy alias: generateTicket uploads to S3 ─────────────────────
+
 async function generateTicket(booking_id) {
   try {
     const result = await generateTicketBuffer(booking_id);
 
-    // Upload to S3 for persistent storage
     const s3Result = await s3Service.uploadBuffer({
       buffer: result.buffer,
       key: `tickets/${result.filename}`,
@@ -324,7 +455,6 @@ async function generateTicket(booking_id) {
     return s3Result.location;
   } catch (err) {
     console.error('[TicketService] Failed to generate/upload ticket:', err);
-    // Fallback to virtual path if S3 fails (for temporary backward compatibility)
     const data = await getFullOrderData(booking_id);
     if (data) {
       return `/api/tickets/generated/ORDER_${data.orderRef}.pdf`;

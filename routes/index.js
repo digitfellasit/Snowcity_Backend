@@ -18,6 +18,7 @@ router.use('/addons', cachePublic(300), require('./addons.routes'));            
 router.use('/combos', cachePublic(300), require('./combos.routes'));                // 5 min
 router.use('/combo-slots', require('./comboSlots.routes'));
 router.use('/coupons', cachePublic(300), require('./coupons.routes'));              // 5 min
+router.use('/dynamic-pricing', cachePublic(300), require('./dynamicPricing.public.routes')); // 5 min
 router.use('/offers', cachePublic(300), require('./offers.routes'));                // 5 min
 router.use('/pages', cachePublic(600), require('./pages.routes'));                  // 10 min
 router.use('/blogs', cachePublic(600), require('./blogs.routes'));                  // 10 min

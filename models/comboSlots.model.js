@@ -32,7 +32,7 @@ function generateDynamicComboSlots(date, combo, existingBookings = []) {
       end_date: date,
       start_time: startTime,
       end_time: endTime,
-      capacity: 15, // Default capacity for combos
+      capacity: 999999, // Unlimited capacity
       available: !isBooked,
       is_booked: isBooked,
       price: combo.total_price || combo.combo_price || 0,
@@ -348,7 +348,7 @@ function generateDynamicSlotsForDateRange(comboId, startDate, endDate, slotDurat
         end_date: dateStr,
         start_time: startTime,
         end_time: endTime,
-        capacity: 300,
+        capacity: 999999,
         price: null,
         available: true,
         is_dynamic: true,

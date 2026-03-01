@@ -187,7 +187,7 @@ async function buildTicketTemplateDataForOrder(orderId) {
   };
 }
 
-async function ensureTicketPdfForOrder(orderId) {
+async function ensureTicketPdfForOrder(orderId, force = false) {
   const bRes = await pool.query(
     `SELECT booking_id, ticket_pdf FROM bookings WHERE order_id = $1 ORDER BY booking_id ASC`,
     [orderId]
@@ -195,13 +195,13 @@ async function ensureTicketPdfForOrder(orderId) {
   const rows = bRes.rows || [];
   if (!rows.length) return null;
   const existing = rows.find((r) => r.ticket_pdf)?.ticket_pdf || null;
-  if (existing) return existing;
+  if (existing && !force) return existing;
 
   const ticketService = require('./ticketService');
   const urlPath = await ticketService.generateTicket(rows[0].booking_id);
   if (urlPath) {
     await pool.query(
-      `UPDATE bookings SET ticket_pdf = $1, updated_at = NOW() WHERE order_id = $2 AND (ticket_pdf IS NULL OR ticket_pdf = '')`,
+      `UPDATE bookings SET ticket_pdf = $1, updated_at = NOW() WHERE order_id = $2`,
       [urlPath, orderId]
     );
   }
@@ -224,7 +224,7 @@ async function sendTicketForOrder(orderId, { skipConsentCheck = false, force = f
     return { success: false, reason: 'already-sent' };
   }
 
-  const ensuredTicket = await ensureTicketPdfForOrder(orderId);
+  const ensuredTicket = await ensureTicketPdfForOrder(orderId, force);
   const data = await buildTicketTemplateDataForOrder(orderId);
   if (!data) return { success: false, reason: 'order-not-found' };
 

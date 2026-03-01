@@ -49,7 +49,7 @@ function mapRule(row) {
     slot_id: row.slot_id,
     rule_discount_type: row.rule_discount_type,
     rule_discount_value: row.rule_discount_value != null ? Number(row.rule_discount_value) : null,
-    priority: Number(row.priority ?? 100),
+    priority: 0,
     day_type: row.day_type,
     specific_days: row.specific_days,
     is_holiday: !!row.is_holiday,
@@ -62,7 +62,7 @@ function mapRule(row) {
 
 async function listOfferRules(offer_id) {
   const { rows } = await pool.query(
-    `SELECT * FROM offer_rules WHERE offer_id = $1 ORDER BY priority ASC, rule_id ASC`,
+    `SELECT * FROM offer_rules WHERE offer_id = $1 ORDER BY rule_id ASC`,
     [offer_id]
   );
   return rows.map(mapRule);
@@ -113,7 +113,7 @@ async function replaceOfferRules(offer_id, rules = []) {
       rule?.slot_id ?? rule?.slotId ?? null,
       rule?.rule_discount_type ?? rule?.ruleDiscountType ?? null,
       rule?.rule_discount_value ?? rule?.ruleDiscountValue ?? null,
-      100, // Fixed default priority
+      0, // Priority always 0 (unused)
       (rule?.day_type ?? rule?.dayType ?? null) || null,
       rule?.specific_days ?? rule?.specificDays ?? null,
       !!rule?.is_holiday,
@@ -293,6 +293,33 @@ async function findApplicableOfferRule({
   const matchDate = date || new Date().toISOString().slice(0, 10);
   const matchTime = time || null;
 
+  // ── Same-day blocking: offers only apply for future dates ──────────
+  const todayStr = new Date().toISOString().slice(0, 10);
+  if (matchDate <= todayStr) {
+    return null; // No offers for same-day or past bookings
+  }
+  // ───────────────────────────────────────────────────────────────────
+
+  // ── Dynamic Pricing Override ──────────────────────────────────────
+  // If dynamic pricing rules exist for this target + date, DO NOT apply
+  // any offers (wednesday, happy_hour, etc.). Only the dynamic price is used.
+  if (targetId != null) {
+    try {
+      const dynamicPricingModel = require('./dynamicPricing.model');
+      const dpRules = await dynamicPricingModel.getApplicableRules(
+        targetType,
+        Number(targetId),
+        matchDate,
+      );
+      if (Array.isArray(dpRules) && dpRules.length > 0) {
+        return null; // Dynamic pricing overrides all offers for this date
+      }
+    } catch (_) {
+      // dynamicPricing model might not exist — silently continue
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────
+
   const params = [
     targetType,
     targetId,
@@ -352,7 +379,7 @@ async function findApplicableOfferRule({
         OR array_length(r.specific_days::int[], 1) IS NULL
         OR (EXTRACT(DOW FROM $9::date)) = ANY(r.specific_days::int[])
         )
-     ORDER BY r.priority DESC, r.rule_id DESC
+     ORDER BY r.rule_id DESC
      LIMIT 1`,
     params
   );

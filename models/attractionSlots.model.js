@@ -5,7 +5,7 @@ function generateDynamicSlots(date, existingBookings = []) {
   const slots = [];
   const startHour = 10; // 10:00 AM
   const endHour = 20;   // 8:00 PM
-  
+
   // Convert existing bookings to a Set for quick lookup
   const bookedSlots = new Set();
   existingBookings.forEach(booking => {
@@ -14,14 +14,14 @@ function generateDynamicSlots(date, existingBookings = []) {
       bookedSlots.add(hour);
     }
   });
-  
+
   for (let hour = startHour; hour < endHour; hour++) {
     const startTime = `${String(hour).padStart(2, '0')}:00:00`;
     const endTime = `${String(hour + 1).padStart(2, '0')}:00:00`;
-    
+
     // Check if this slot is already booked
     const isBooked = bookedSlots.has(hour);
-    
+
     slots.push({
       slot_id: `${date.replace(/-/g, '')}-${hour}`, // Virtual slot ID
       attraction_id: null, // Will be set by controller
@@ -29,7 +29,7 @@ function generateDynamicSlots(date, existingBookings = []) {
       end_date: date,
       start_time: startTime,
       end_time: endTime,
-      capacity: 20, // Default capacity
+      capacity: 999999, // Unlimited capacity
       available: !isBooked,
       is_booked: isBooked,
       price: null,
@@ -38,7 +38,7 @@ function generateDynamicSlots(date, existingBookings = []) {
       is_dynamic: true
     });
   }
-  
+
   return slots;
 }
 
@@ -49,19 +49,19 @@ async function getSlotById(slot_id) {
     const hour = parseInt(hourStr);
     const startTime = `${String(hour).padStart(2, '0')}:00:00`;
     const endTime = `${String(hour + 1).padStart(2, '0')}:00:00`;
-    
+
     return {
       slot_id,
       start_date: date,
       end_date: date,
       start_time: startTime,
       end_time: endTime,
-      capacity: 20,
+      capacity: 999999,
       available: true,
       is_dynamic: true
     };
   }
-  
+
   // Fallback to database for any existing physical slots
   const { rows } = await pool.query(`SELECT * FROM attraction_slots WHERE slot_id = $1`, [slot_id]);
   return rows[0] || null;
@@ -77,20 +77,20 @@ async function listSlots({ attraction_id = null, date = null, start_date = null,
        WHERE attraction_id = $1 AND booking_date = $2 AND booking_status <> 'Cancelled'`,
       [attraction_id, date]
     );
-    
+
     const slots = generateDynamicSlots(date, bookings);
     return slots.map(slot => ({ ...slot, attraction_id }));
   }
-  
+
   // If date range is requested, generate for each date
   if (start_date && end_date && attraction_id) {
     const allSlots = [];
     const currentDate = new Date(start_date);
     const endDate = new Date(end_date);
-    
+
     while (currentDate <= endDate) {
       const dateStr = currentDate.toISOString().slice(0, 10);
-      
+
       // Get existing bookings for this attraction and date
       const { rows: bookings } = await pool.query(
         `SELECT booking_date, booking_time 
@@ -98,16 +98,16 @@ async function listSlots({ attraction_id = null, date = null, start_date = null,
          WHERE attraction_id = $1 AND booking_date = $2 AND booking_status <> 'Cancelled'`,
         [attraction_id, dateStr]
       );
-      
+
       const daySlots = generateDynamicSlots(dateStr, bookings);
       allSlots.push(...daySlots.map(slot => ({ ...slot, attraction_id })));
-      
+
       currentDate.setDate(currentDate.getDate() + 1);
     }
-    
+
     return allSlots;
   }
-  
+
   // Fallback to database for existing physical slots (backward compatibility)
   const where = [];
   const params = [];
@@ -305,21 +305,21 @@ function generateDynamicSlotsForDateRange(attractionId, startDate, endDate, slot
   const slots = [];
   const startHour = 10; // 10:00 AM
   const endHour = 20;   // 8:00 PM
-  
+
   const current = new Date(startDate);
-  
+
   // Generate slots for the complete date range
   while (current <= endDate) {
     const dateStr = current.toISOString().slice(0, 10);
-    
+
     // Generate slots throughout the day
     for (let hour = startHour; hour + slotDuration <= endHour; hour++) {
       const startTime = `${hour.toString().padStart(2, '0')}:00:00`;
       const endTime = `${(hour + slotDuration).toString().padStart(2, '0')}:00:00`;
-      
+
       // Generate virtual slot ID
       const virtualSlotId = `${attractionId}-${dateStr.replace(/-/g, '')}-${hour.toString().padStart(2, '0')}`;
-      
+
       slots.push({
         slot_id: virtualSlotId,
         attraction_id: attractionId,
@@ -327,7 +327,7 @@ function generateDynamicSlotsForDateRange(attractionId, startDate, endDate, slot
         end_date: dateStr,
         start_time: startTime,
         end_time: endTime,
-        capacity: 300,
+        capacity: 999999,
         price: null,
         available: true,
         is_dynamic: true,
@@ -335,10 +335,10 @@ function generateDynamicSlotsForDateRange(attractionId, startDate, endDate, slot
         updated_at: new Date().toISOString()
       });
     }
-    
+
     current.setDate(current.getDate() + 1);
   }
-  
+
   return slots;
 }
 
