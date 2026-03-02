@@ -43,6 +43,22 @@ async function applyOfferPricing({
       if (Array.isArray(dpRules) && dpRules.length > 0) {
         return { unit: base, discount: 0, discount_percent: 0, offer: null };
       }
+
+      // Also check date-specific pricing (attraction_date_prices / combo_date_prices)
+      const normalizedType = String(targetType).toLowerCase();
+      if (normalizedType === 'attraction') {
+        const attractionDatePricesModel = require('../models/attractionDatePrices.model');
+        const datePrice = await attractionDatePricesModel.getDatePrice(Number(targetId), booking_date);
+        if (datePrice) {
+          return { unit: base, discount: 0, discount_percent: 0, offer: null };
+        }
+      } else if (normalizedType === 'combo') {
+        const comboDatePricesModel = require('../models/comboDatePrices.model');
+        const datePrice = await comboDatePricesModel.getDatePrice(Number(targetId), booking_date);
+        if (datePrice) {
+          return { unit: base, discount: 0, discount_percent: 0, offer: null };
+        }
+      }
     } catch (_) {
       // silently continue if model unavailable
     }

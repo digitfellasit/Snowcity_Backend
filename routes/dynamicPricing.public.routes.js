@@ -1,5 +1,7 @@
 const router = require('express').Router();
 const dynamicPricingModel = require('../models/dynamicPricing.model');
+const attractionDatePricesModel = require('../models/attractionDatePrices.model');
+const comboDatePricesModel = require('../models/comboDatePrices.model');
 
 // GET /api/dynamic-pricing/check?target_type=attraction&target_id=1&date=2026-03-05
 router.get('/check', async (req, res, next) => {
@@ -17,7 +19,23 @@ router.get('/check', async (req, res, next) => {
             date
         );
 
-        const hasDynamicPricing = Array.isArray(rules) && rules.length > 0;
+        let hasDynamicPricing = Array.isArray(rules) && rules.length > 0;
+
+        // Also check date-specific pricing (attraction_date_prices / combo_date_prices)
+        if (!hasDynamicPricing) {
+            try {
+                const normalizedType = String(target_type).toLowerCase();
+                if (normalizedType === 'attraction') {
+                    const datePrice = await attractionDatePricesModel.getDatePrice(Number(target_id), date);
+                    if (datePrice) hasDynamicPricing = true;
+                } else if (normalizedType === 'combo') {
+                    const datePrice = await comboDatePricesModel.getDatePrice(Number(target_id), date);
+                    if (datePrice) hasDynamicPricing = true;
+                }
+            } catch (_) {
+                // silently continue
+            }
+        }
 
         res.json({
             hasDynamicPricing,

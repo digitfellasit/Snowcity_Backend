@@ -416,13 +416,13 @@ async function getDetailedDailyAnalytics({ from = null, to = null, attraction_id
     // Get detailed slot-wise and hour-wise data
     const detailedSql = `
       SELECT
-        b.booking_date,
+        s.start_date AS booking_date,
         CASE
           WHEN b.attraction_id IS NOT NULL THEN 'attraction'
           ELSE 'combo'
         END AS type,
-        COALESCE(a.name, c.name) AS name,
-        COALESCE(a.price, c.price) AS base_price,
+        COALESCE(a.title, c.name) AS name,
+        COALESCE(a.base_price, c.combo_price) AS base_price,
         COALESCE(b.attraction_id, b.combo_id) AS id,
         s.start_time,
         s.end_time,
@@ -432,21 +432,21 @@ async function getDetailedDailyAnalytics({ from = null, to = null, attraction_id
         COALESCE(SUM(CASE WHEN b.payment_status = 'Completed' AND b.parent_booking_id IS NULL THEN b.quantity END), 0) AS total_people,
         COALESCE(SUM(CASE WHEN b.payment_status = 'Completed' AND b.parent_booking_id IS NULL THEN COALESCE(b.final_amount, b.total_amount, 0) END), 0) AS revenue,
         COALESCE(SUM(CASE WHEN b.payment_status <> 'Completed' AND b.parent_booking_id IS NULL THEN COALESCE(b.final_amount, b.total_amount, 0) END), 0) AS pending_revenue,
-        COUNT(CASE WHEN b.payment_status = 'Completed' AND b.parent_booking_id IS NULL AND b.applied_offer_id IS NOT NULL THEN 1 END) AS bookings_with_offers,
-        COALESCE(SUM(CASE WHEN b.payment_status = 'Completed' AND b.parent_booking_id IS NULL AND b.applied_offer_id IS NOT NULL THEN (COALESCE(b.total_amount, 0) - COALESCE(b.final_amount, 0)) END), 0) AS total_discounts,
+        COUNT(CASE WHEN b.payment_status = 'Completed' AND b.parent_booking_id IS NULL AND b.offer_id IS NOT NULL THEN 1 END) AS bookings_with_offers,
+        COALESCE(SUM(CASE WHEN b.payment_status = 'Completed' AND b.parent_booking_id IS NULL AND b.offer_id IS NOT NULL THEN (COALESCE(b.total_amount, 0) - COALESCE(b.final_amount, 0)) END), 0) AS total_discounts,
         -- Slot availability
-        COUNT(CASE WHEN s.is_available = true THEN 1 END) AS available_slots,
-        COUNT(CASE WHEN s.is_available = false THEN 1 END) AS booked_slots,
+        COUNT(CASE WHEN s.available = true THEN 1 END) AS available_slots,
+        COUNT(CASE WHEN s.available = false THEN 1 END) AS booked_slots,
         COUNT(*) AS total_slots
-      FROM slots s
-      LEFT JOIN bookings b ON b.slot_id = s.id AND b.booking_status <> 'Cancelled'
+      FROM attraction_slots s
+      LEFT JOIN bookings b ON b.slot_id = s.slot_id AND b.booking_status <> 'Cancelled'
       LEFT JOIN attractions a ON s.attraction_id = a.attraction_id
       LEFT JOIN combos c ON s.combo_id = c.combo_id
-      WHERE s.date >= COALESCE($${paramIndex}::date, CURRENT_DATE - INTERVAL '30 days')
-        AND s.date <= COALESCE($${paramIndex + 1}::date, CURRENT_DATE)
+      WHERE s.start_date >= COALESCE($${paramIndex}::date, CURRENT_DATE - INTERVAL '30 days')
+        AND s.start_date <= COALESCE($${paramIndex + 1}::date, CURRENT_DATE)
         ${scopeWhere.replace(/b\./g, 's.')}
-      GROUP BY b.booking_date, s.start_time, s.end_time, s.attraction_id, s.combo_id, a.name, a.price, c.name, c.price
-      ORDER BY b.booking_date DESC, s.start_time ASC;
+      GROUP BY s.start_date, s.start_time, s.end_time, s.attraction_id, s.combo_id, a.title, a.base_price, c.name, c.combo_price
+      ORDER BY s.start_date DESC, s.start_time ASC;
     `;
 
     const { rows } = await pool.query(detailedSql, scopeParams);
@@ -488,7 +488,8 @@ async function getDetailedDailyAnalytics({ from = null, to = null, attraction_id
       daily.bookings_with_offers += Number(row.bookings_with_offers || 0);
       daily.total_discounts += Number(row.total_discounts || 0);
       daily.slots_used += Number(row.completed_bookings > 0 ? 1 : 0);
-      daily.hours_booked += Number(row.completed_bookings > 0 ? (new Date(row.end_time) - new Date(row.start_time)) / (1000 * 60 * 60) : 0);
+      daily.hours_booked += Number(row.completed_bookings > 0 && row.start_time && row.end_time ?
+        (new Date(`1970-01-01T${row.end_time}`) - new Date(`1970-01-01T${row.start_time}`)) / (1000 * 60 * 60) : 0);
 
       // Add slot/hour data
       daily.slot_hour_data.push({
@@ -525,7 +526,7 @@ async function getDetailedDailyAnalytics({ from = null, to = null, attraction_id
           WHEN b.attraction_id IS NOT NULL THEN 'attraction'
           ELSE 'combo'
         END AS type,
-        COALESCE(a.name, c.name) AS name,
+        COALESCE(a.title, c.name) AS name,
         COALESCE(b.attraction_id, b.combo_id) AS id,
         COUNT(CASE WHEN b.payment_status = 'Completed' AND b.parent_booking_id IS NULL THEN 1 END) AS completed_bookings,
         COUNT(CASE WHEN b.payment_status <> 'Completed' AND b.parent_booking_id IS NULL THEN 1 END) AS pending_bookings,
@@ -535,17 +536,17 @@ async function getDetailedDailyAnalytics({ from = null, to = null, attraction_id
         COALESCE(SUM(CASE WHEN b.payment_status <> 'Completed' AND b.parent_booking_id IS NULL THEN COALESCE(b.final_amount, b.total_amount, 0) END), 0) AS pending_revenue,
         COUNT(DISTINCT CASE WHEN b.payment_status = 'Completed' AND b.parent_booking_id IS NULL THEN b.user_id END) AS unique_customers,
         AVG(CASE WHEN b.payment_status = 'Completed' AND b.parent_booking_id IS NULL THEN COALESCE(b.final_amount, b.total_amount, 0) END) AS avg_booking_value,
-        COUNT(DISTINCT CASE WHEN b.payment_status = 'Completed' AND b.parent_booking_id IS NULL THEN s.id END) AS slots_used,
+        COUNT(DISTINCT CASE WHEN b.payment_status = 'Completed' AND b.parent_booking_id IS NULL THEN s.slot_id END) AS slots_used,
         SUM(CASE WHEN b.payment_status = 'Completed' AND b.parent_booking_id IS NULL THEN EXTRACT(EPOCH FROM (s.end_time - s.start_time))/3600 END) AS hours_booked,
-        COUNT(CASE WHEN b.payment_status = 'Completed' AND b.parent_booking_id IS NULL AND b.applied_offer_id IS NOT NULL THEN 1 END) AS bookings_with_offers,
-        COALESCE(SUM(CASE WHEN b.payment_status = 'Completed' AND b.parent_booking_id IS NULL AND b.applied_offer_id IS NOT NULL THEN (COALESCE(b.total_amount, 0) - COALESCE(b.final_amount, 0)) END), 0) AS total_discounts
+        COUNT(CASE WHEN b.payment_status = 'Completed' AND b.parent_booking_id IS NULL AND b.offer_id IS NOT NULL THEN 1 END) AS bookings_with_offers,
+        COALESCE(SUM(CASE WHEN b.payment_status = 'Completed' AND b.parent_booking_id IS NULL AND b.offer_id IS NOT NULL THEN (COALESCE(b.total_amount, 0) - COALESCE(b.final_amount, 0)) END), 0) AS total_discounts
       FROM bookings b
       LEFT JOIN attractions a ON b.attraction_id = a.attraction_id
       LEFT JOIN combos c ON b.combo_id = c.combo_id
-      LEFT JOIN slots s ON b.slot_id = s.id
+      LEFT JOIN attraction_slots s ON b.slot_id = s.slot_id
       WHERE ${dateWhere}${scopeWhere}
         AND b.booking_status <> 'Cancelled'
-      GROUP BY b.booking_date, b.attraction_id, b.combo_id, a.name, c.name
+      GROUP BY b.booking_date, b.attraction_id, b.combo_id, a.title, c.name
       ORDER BY b.booking_date DESC, revenue DESC;
     `;
 

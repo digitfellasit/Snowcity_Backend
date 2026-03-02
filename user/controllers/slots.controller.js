@@ -42,6 +42,9 @@ const enrichSlotWithPricing = async (slot, attraction) => {
     quantity: 1,
   });
 
+  const isDPActive = Array.isArray(pricingResult.appliedRules) &&
+    pricingResult.appliedRules.some(r => r.type === 'dynamic_pricing_adjustment');
+
   return {
     ...slot,
     base_price: basePrice,
@@ -49,12 +52,14 @@ const enrichSlotWithPricing = async (slot, attraction) => {
     original_price: pricingResult.originalPrice,
     discount_amount: pricingResult.discountAmount,
     applied_rules: pricingResult.appliedRules,
+    dynamic_pricing_active: isDPActive,
     pricing: {
       base_price: basePrice,
       final_price: pricingResult.finalPrice,
       original_price: pricingResult.originalPrice,
       discount_amount: pricingResult.discountAmount,
       applied_rules: pricingResult.appliedRules,
+      dynamic_pricing_active: isDPActive,
     },
   };
 };

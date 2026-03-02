@@ -145,16 +145,37 @@ async function calculateDynamicPrice({ itemType, itemId, basePrice, date, time, 
 
   // Check for date-specific pricing first (overrides base price)
   let effectiveBasePrice = basePrice;
+  let hasDateSpecificPrice = false;
   if (itemType === 'attraction') {
     const datePrice = await attractionDatePricesModel.getDatePrice(itemId, dateStr);
     if (datePrice) {
       effectiveBasePrice = Number(datePrice.price) || basePrice;
+      hasDateSpecificPrice = true;
     }
   } else if (itemType === 'combo') {
     const datePrice = await comboDatePricesModel.getDatePrice(itemId, dateStr);
     if (datePrice) {
       effectiveBasePrice = Number(datePrice.price) || basePrice;
+      hasDateSpecificPrice = true;
     }
+  }
+
+  // If a date-specific price exists, skip ALL offers (treat as dynamic pricing override)
+  if (hasDateSpecificPrice) {
+    return {
+      originalPrice: effectiveBasePrice,
+      finalPrice: effectiveBasePrice,
+      discountAmount: 0,
+      appliedRules: [{
+        ruleId: null,
+        ruleName: 'Date-Specific Price',
+        adjustmentType: 'date_specific',
+        adjustmentValue: effectiveBasePrice,
+        adjustmentAmount: 0,
+        type: 'dynamic_pricing_adjustment'
+      }],
+      totalPrice: effectiveBasePrice * quantity
+    };
   }
 
   // First check if there are dynamic pricing rules for this date

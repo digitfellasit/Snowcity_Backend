@@ -35,7 +35,10 @@ function formatTime12h(t) {
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 || 12;
 
-  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+  if (m === 0) {
+    return `${h12}${ampm}`;
+  }
+  return `${h12}:${String(m).padStart(2, '0')}${ampm}`;
 }
 
 function formatDateIN(d) {
@@ -45,9 +48,9 @@ function formatDateIN(d) {
     if (Number.isNaN(dt.getTime())) return '';
     return dt.toLocaleDateString('en-IN', {
       timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short'
     });
   } catch {
     return '';
@@ -59,7 +62,7 @@ function formatSlotRange(row) {
   const end = formatTime12h(row?.slot_end_time || row?.end_time);
 
   if (start && end) {
-    return `${start} - ${end}`;
+    return `${start}–${end}`;
   }
   if (start) {
     return start;
@@ -100,7 +103,8 @@ function normalizePhone(p) {
 
 async function buildTicketTemplateDataForOrder(orderId) {
   const ordRes = await pool.query(
-    `SELECT o.order_id, o.order_ref, o.user_id, u.name AS user_name, u.phone, u.whatsapp_consent
+    `SELECT o.order_id, o.order_ref, o.user_id, o.total_amount, o.final_amount, 
+            u.name AS user_name, u.phone, u.whatsapp_consent
      FROM orders o
      LEFT JOIN users u ON u.user_id = o.user_id
      WHERE o.order_id = $1`,
@@ -145,14 +149,14 @@ async function buildTicketTemplateDataForOrder(orderId) {
 
   attractionsByDate.forEach((attractions, date) => {
     const attractionDetails = attractions.map(attr => {
-      const timeStr = attr.time ? ` (${attr.time})` : '';
-      return `${attr.title} (Qty: ${attr.qty})${timeStr}`;
+      const timePart = (attr.time && attr.time !== 'Open Entry') ? ` | ${attr.time}` : '';
+      return `${attr.title} — ${date}${timePart} | * ${attr.qty}`;
     }).join(', ');
 
-    attractionLines.push(`${date}: ${attractionDetails}`);
+    attractionLines.push(attractionDetails);
   });
 
-  const itemsText = attractionLines.length ? attractionLines.join(' | ') : 'Booking details unavailable';
+  const itemsText = attractionLines.length ? attractionLines.join(', ') : 'Booking details unavailable';
 
   const addonMap = new Map();
   effectiveItems.forEach((it) => {
@@ -169,20 +173,24 @@ async function buildTicketTemplateDataForOrder(orderId) {
   const addonLines = Array.from(addonMap.values())
     .filter((x) => x.qty > 0)
     .sort((a, b) => String(a.name).localeCompare(String(b.name)))
-    .map((x) => `${x.name} (${x.qty}x)`);
+    .map((x) => `${x.name} * ${x.qty}`);
   const addonsText = addonLines.length ? addonLines.join(', ') : 'None';
 
   const firstTicket = (items.find((x) => x.ticket_pdf) || {}).ticket_pdf || null;
   const mediaUrl = resolveMediaUrl(firstTicket);
 
+  const rawName = ord.user_name || 'Guest';
+  const userName = rawName.trim().charAt(0).toUpperCase() + rawName.trim().slice(1);
+
   return {
     order_id: ord.order_id,
-    order_ref: ord.order_ref,
-    user_name: ord.user_name || 'Guest',
+    order_ref: (ord.order_ref || '').trim(),
+    user_name: userName,
     phone: ord.phone || null,
     whatsapp_consent: !!ord.whatsapp_consent,
     itemsText,
     addonsText,
+    total_amount: ord.final_amount || ord.total_amount || 0,
     mediaUrl
   };
 }
@@ -251,8 +259,10 @@ async function sendTicketForOrder(orderId, { skipConsentCheck = false, force = f
       headerValues: mediaUrl ? [mediaUrl] : [],
       bodyValues: [
         data.user_name || 'Guest',
+        data.order_ref || `order-${orderId}`,
         data.itemsText || 'Booking confirmed',
-        data.addonsText || 'None'
+        data.addonsText || 'None',
+        data.total_amount || '0'
       ]
     }
   };

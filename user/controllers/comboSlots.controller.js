@@ -22,6 +22,9 @@ const enrichComboSlotWithPricing = async (slot, combo) => {
     quantity: 1,
   });
 
+  const isDPActive = Array.isArray(pricingResult.appliedRules) &&
+    pricingResult.appliedRules.some(r => r.type === 'dynamic_pricing_adjustment');
+
   return {
     ...slot,
     base_price: basePrice,
@@ -29,12 +32,14 @@ const enrichComboSlotWithPricing = async (slot, combo) => {
     original_price: pricingResult.originalPrice,
     discount_amount: pricingResult.discountAmount,
     applied_rules: pricingResult.appliedRules,
+    dynamic_pricing_active: isDPActive,
     pricing: {
       base_price: basePrice,
       final_price: pricingResult.finalPrice,
       original_price: pricingResult.originalPrice,
       discount_amount: pricingResult.discountAmount,
       applied_rules: pricingResult.appliedRules,
+      dynamic_pricing_active: isDPActive,
     },
   };
 };
@@ -51,9 +56,9 @@ exports.listSlots = async (req, res, next) => {
     const date = req.query.date || null;
     const start_date = req.query.start_date || null;
     const end_date = req.query.end_date || null;
-    
+
     const data = await comboSlotService.list({ combo_id, date, start_date, end_date });
-    
+
     // If we have combo_id, enrich with pricing
     let enrichedData = data;
     if (combo_id) {
@@ -62,7 +67,7 @@ exports.listSlots = async (req, res, next) => {
         enrichedData = await mapSlotsWithPricing(data, combo);
       }
     }
-    
+
     res.json({ data: enrichedData, meta: { count: enrichedData.length } });
   } catch (err) {
     next(err);
