@@ -55,6 +55,13 @@ router.get('/generated/:filename', async (req, res, next) => {
             return res.status(404).send('Ticket info not fully found');
         }
 
+        // Check if we already have an S3 URL stored
+        const ticketRes = await pool.query('SELECT ticket_pdf FROM bookings WHERE booking_id = $1', [targetBookingId]);
+        const ticketPdf = ticketRes.rows[0]?.ticket_pdf;
+        if (ticketPdf && ticketPdf.startsWith('http')) {
+            return res.redirect(ticketPdf);
+        }
+
         const { buffer } = await ticketService.generateTicketBuffer(targetBookingId);
 
         res.setHeader('Content-Type', 'application/pdf');

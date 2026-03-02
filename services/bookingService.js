@@ -837,6 +837,17 @@ async function checkPayPhiStatus(orderId) {
       );
     });
 
+    // Generate and store ticket in S3
+    try {
+      const bRes = await pool.query('SELECT booking_id FROM bookings WHERE order_id = $1 LIMIT 1', [order.order_id]);
+      if (bRes.rows.length > 0) {
+        const ticketUrl = await ticketService.generateTicket(bRes.rows[0].booking_id);
+        await pool.query('UPDATE bookings SET ticket_pdf = $1 WHERE order_id = $2', [ticketUrl, order.order_id]);
+      }
+    } catch (err) {
+      console.error('Failed to generate/store ticket in S3 after PayPhi payment', err);
+    }
+
     // Ticket PDFs are generated on-the-fly when needed (download, email, WhatsApp)
     // No disk storage — generate buffer and send directly
 
@@ -979,6 +990,17 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
         [txnId, order.order_id]
       );
     });
+
+    // Generate and store ticket in S3
+    try {
+      const bRes = await pool.query('SELECT booking_id FROM bookings WHERE order_id = $1 LIMIT 1', [order.order_id]);
+      if (bRes.rows.length > 0) {
+        const ticketUrl = await ticketService.generateTicket(bRes.rows[0].booking_id);
+        await pool.query('UPDATE bookings SET ticket_pdf = $1 WHERE order_id = $2', [ticketUrl, order.order_id]);
+      }
+    } catch (err) {
+      console.error('Failed to generate/store ticket in S3 after PhonePe payment', err);
+    }
 
     // Ticket PDFs are generated on-the-fly when needed (download, email, WhatsApp)
     // No disk storage

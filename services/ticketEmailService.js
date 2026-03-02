@@ -185,7 +185,7 @@ async function sendTicketEmail(booking_id) {
     billing_name: user?.name || '',
     billing_phone: user?.phone || '',
     billing_email: user?.email || '',
-    download_link: b.ticket_pdf ? `${APP_URL}${b.ticket_pdf}` : ''
+    download_link: b.ticket_pdf ? (b.ticket_pdf.startsWith('http') ? b.ticket_pdf : `${APP_URL}${b.ticket_pdf}`) : ''
   });
 
   const attachments = [];
@@ -240,7 +240,9 @@ async function sendOrderEmail(order_id) {
     billing_name: user?.name || '',
     billing_phone: user?.phone || '',
     billing_email: user?.email || '',
-    download_link: (order.items && order.items[0] && order.items[0].ticket_pdf) ? `${APP_URL}${order.items[0].ticket_pdf}` : ''
+    download_link: (order.items && order.items[0] && order.items[0].ticket_pdf)
+      ? (order.items[0].ticket_pdf.startsWith('http') ? order.items[0].ticket_pdf : `${APP_URL}${order.items[0].ticket_pdf}`)
+      : ''
   });
 
   const attachments = [];

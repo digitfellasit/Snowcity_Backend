@@ -241,14 +241,19 @@ async function drawConsolidatedTicket(doc, data) {
   // 4. ATTRACTION / BOOKING CARDS
   // ═══════════════════════════════════════════════════════════════
   items.forEach((item) => {
-    const cardH = 90;
+    const title = item.item_title || 'Booking';
+    const hasAddons = item.addons && item.addons.length > 0;
+    const isSnowPark = (title || '').toLowerCase().includes('snow park');
+
+    let cardH = 85;
+    if (hasAddons) cardH += 15 + (item.addons.length * 12);
+    if (isSnowPark) cardH += 25;
 
     if (y + cardH > PH - 140) {
       doc.addPage();
       y = M;
     }
 
-    const title = item.item_title || 'Booking';
     const color = getAttractionColor(title);
     const slotStr = getSlotDisplay(item);
     const dateStr = dayjs(item.booking_date).format('dddd, D MMMM YYYY');
@@ -281,10 +286,31 @@ async function drawConsolidatedTicket(doc, data) {
     doc.fontSize(14).fillColor(C.text)
       .text(String(qty), PW - M - 60, infoY + 10);
 
+    let nextY = infoY + 28;
+
+    // Add-ons Section
+    if (hasAddons) {
+      doc.font('Helvetica-Bold').fontSize(7.5).fillColor(C.veryLight)
+        .text('ADD-ONS', M + 14, nextY);
+      nextY += 12;
+
+      item.addons.forEach((addon) => {
+        doc.font('Helvetica').fontSize(8.5).fillColor(C.text)
+          .text(addon.title || 'Add-on', M + 14, nextY);
+
+        const priceStr = `${addon.quantity} x ${money(addon.price)}`;
+        doc.font('Helvetica-Bold').fontSize(8.5).fillColor(C.text)
+          .text(priceStr, PW - M - 140, nextY, { width: 120, align: 'right' });
+
+        nextY += 12;
+      });
+      nextY += 5;
+    }
+
     // Snow Park Specific Note
-    if ((title || '').toLowerCase().includes('snow park')) {
+    if (isSnowPark) {
       const boxY = y + cardH - 25;
-      doc.rect(M + 14, boxY, 300, 18).fill('#E3F2FD').radius(4);
+      doc.roundedRect(M + 14, boxY, 300, 18, 4).fill('#E3F2FD');
       doc.font('Helvetica').fontSize(7.5).fillColor('#1565C0')
         .text('■ Arrive 15 mins early for jacket, boots & gloves • 45 mins snow access', M + 20, boxY + 6);
     }
@@ -417,10 +443,6 @@ async function generateTicket(booking_id) {
     return s3Result.location;
   } catch (err) {
     console.error('[TicketService] Failed to generate/upload ticket:', err);
-    const data = await getFullOrderData(booking_id);
-    if (data) {
-      return `/api/tickets/generated/ORDER_${data.orderRef}.pdf`;
-    }
     throw err;
   }
 }

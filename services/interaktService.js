@@ -166,14 +166,19 @@ async function buildTicketTemplateDataForOrder(orderId) {
       if (!key) return;
       const name = a.title || a.addon_title || 'Addon';
       const qty = Number(a.quantity || 0);
-      if (!addonMap.has(key)) addonMap.set(key, { name, qty: 0 });
+      const price = Number(a.price || 0);
+
+      if (!addonMap.has(key)) {
+        addonMap.set(key, { name, qty: 0, price });
+      }
       addonMap.get(key).qty += qty;
     });
   });
+
   const addonLines = Array.from(addonMap.values())
     .filter((x) => x.qty > 0)
     .sort((a, b) => String(a.name).localeCompare(String(b.name)))
-    .map((x) => `${x.name} * ${x.qty}`);
+    .map((x) => `${x.name} (₹${x.price}) * ${x.qty}`);
   const addonsText = addonLines.length ? addonLines.join(', ') : 'None';
 
   const firstTicket = (items.find((x) => x.ticket_pdf) || {}).ticket_pdf || null;

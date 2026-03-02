@@ -331,6 +331,11 @@ exports.downloadTicket = async (req, res, next) => {
       return res.status(400).json({ error: 'Payment not completed' });
     }
 
+    // Check if we already have an S3 URL stored
+    if (booking.ticket_pdf && booking.ticket_pdf.startsWith('http')) {
+      return res.redirect(booking.ticket_pdf);
+    }
+
     // Generate PDF buffer on-the-fly
     const { buffer, filename } = await ticketService.generateTicketBuffer(id);
 

@@ -790,6 +790,11 @@ exports.downloadTicket = async function downloadTicket(req, res, next) {
     const booking = await bookingsModel.getBookingById(id);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
 
+    // Check if we already have an S3 URL stored
+    if (booking.ticket_pdf && booking.ticket_pdf.startsWith('http')) {
+      return res.redirect(booking.ticket_pdf);
+    }
+
     // Generate PDF buffer on-the-fly
     const { buffer, filename } = await ticketService.generateTicketBuffer(id);
 
