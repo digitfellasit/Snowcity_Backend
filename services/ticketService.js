@@ -148,12 +148,13 @@ async function drawConsolidatedTicket(doc, data) {
   // ═══════════════════════════════════════════════════════════════
   // 1. WHITE HEADER SECTION
   // ═══════════════════════════════════════════════════════════════
-  const headerH = 70;
+  const headerH = 100;
   doc.rect(0, 0, PW, headerH).fill(C.white);
 
-  // Logo (snowman mascot) – top left
+  // Logo (snowman mascot) – centered and larger
   if (exists(LOGO_PATH)) {
-    doc.image(LOGO_PATH, M, 12, { width: 70 });
+    const logoWidth = 120;
+    doc.image(LOGO_PATH, (PW - logoWidth) / 2, 15, { width: logoWidth });
   }
 
   // Booking ID & Order Date (top-right)
@@ -161,13 +162,13 @@ async function drawConsolidatedTicket(doc, data) {
   const darkBlue = '#044DCE';
 
   doc.font('Helvetica').fontSize(7).fillColor(C.veryLight)
-    .text('BOOKING ID', rightX - 160, 20, { width: 160, align: 'right' });
+    .text('BOOKING ID', rightX - 160, 25, { width: 160, align: 'right' });
 
   doc.font('Helvetica-Bold').fontSize(16).fillColor(darkBlue)
-    .text(orderRef || '', rightX - 160, 30, { width: 160, align: 'right' });
+    .text(orderRef || '', rightX - 160, 38, { width: 160, align: 'right' });
 
   doc.font('Helvetica').fontSize(8).fillColor(C.lightText)
-    .text(`Order Date: ${fmtDateShort(orderDate)}`, rightX - 160, 50, { width: 160, align: 'right' });
+    .text(`Order Date: ${fmtDateShort(orderDate)}`, rightX - 160, 62, { width: 160, align: 'right' });
 
   // ═══════════════════════════════════════════════════════════════
   // 2. BLUE BANNER SECTION
