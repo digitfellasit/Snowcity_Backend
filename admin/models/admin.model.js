@@ -441,11 +441,11 @@ async function getDetailedDailyAnalytics({ from = null, to = null, attraction_id
       FROM attraction_slots s
       LEFT JOIN bookings b ON b.slot_id = s.slot_id AND b.booking_status <> 'Cancelled'
       LEFT JOIN attractions a ON s.attraction_id = a.attraction_id
-      LEFT JOIN combos c ON s.combo_id = c.combo_id
+      LEFT JOIN combos c ON b.combo_id = c.combo_id
       WHERE s.start_date >= COALESCE($${paramIndex}::date, CURRENT_DATE - INTERVAL '30 days')
         AND s.start_date <= COALESCE($${paramIndex + 1}::date, CURRENT_DATE)
-        ${scopeWhere.replace(/b\./g, 's.')}
-      GROUP BY s.start_date, s.start_time, s.end_time, s.attraction_id, s.combo_id, a.title, a.base_price, c.name, c.combo_price
+        ${scopeWhere}
+      GROUP BY s.start_date, s.start_time, s.end_time, s.attraction_id, b.combo_id, a.title, a.base_price, c.name, c.combo_price
       ORDER BY s.start_date DESC, s.start_time ASC;
     `;
 
