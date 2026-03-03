@@ -10,7 +10,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "migrate:001": "node migrations/run_001_add_buy_x_get_y_offers.js",
     "migrate:check": "node migrations/check_migration_status.js",
-    "migrate:001-test": "npm run migrate:check"
+    "migrate:001-test": "npm run migrate:check",
+    "migrate": "node scripts/migrate.js"
   },
   "keywords": [],
   "author": "",

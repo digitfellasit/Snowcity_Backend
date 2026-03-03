@@ -150,7 +150,7 @@ async function buildTicketTemplateDataForOrder(orderId) {
   attractionsByDate.forEach((attractions, date) => {
     const attractionDetails = attractions.map(attr => {
       const timePart = (attr.time && attr.time !== 'Open Entry') ? ` | ${attr.time}` : '';
-      return `${attr.title} — ${date}${timePart} | * ${attr.qty}`;
+      return `${attr.title} — ${date}${timePart} | ${attr.qty} guest`;
     }).join(', ');
 
     attractionLines.push(attractionDetails);
@@ -178,7 +178,7 @@ async function buildTicketTemplateDataForOrder(orderId) {
   const addonLines = Array.from(addonMap.values())
     .filter((x) => x.qty > 0)
     .sort((a, b) => String(a.name).localeCompare(String(b.name)))
-    .map((x) => `${x.name} (₹${x.price}) * ${x.qty}`);
+    .map((x) => `${x.name}(₹${x.price}) x ${x.qty}`);
   const addonsText = addonLines.length ? addonLines.join(', ') : 'None';
 
   const firstTicket = (items.find((x) => x.ticket_pdf) || {}).ticket_pdf || null;
@@ -195,7 +195,7 @@ async function buildTicketTemplateDataForOrder(orderId) {
     whatsapp_consent: !!ord.whatsapp_consent,
     itemsText,
     addonsText,
-    total_amount: ord.final_amount || ord.total_amount || 0,
+    total_amount: `₹${Number(ord.final_amount || ord.total_amount || 0).toLocaleString('en-IN')}`,
     mediaUrl
   };
 }
@@ -259,7 +259,7 @@ async function sendTicketForOrder(orderId, { skipConsentCheck = false, force = f
     callbackData: `ticket-order-${orderId}`,
     type: 'Template',
     template: {
-      name: 'ticket_confirmation_pdf_js',
+      name: 'snow_city_bengaluru_booking_confirmationupdate',
       languageCode: 'en',
       headerValues: mediaUrl ? [mediaUrl] : [],
       bodyValues: [

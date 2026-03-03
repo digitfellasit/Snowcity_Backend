@@ -32,6 +32,7 @@ router.use('/combos', require('./combos.routes'));
 router.use('/combo-slots', require('./comboSlots.routes'));
 router.use('/coupons', require('./coupons.routes'));
 router.use('/offers', require('./offers.routes'));
+router.use('/announcements', require('./announcements.routes'));
 router.use('/banners', require('./banners.routes'));
 router.use('/pages', require('./pages.routes'));
 router.use('/blogs', require('./blogs.routes'));

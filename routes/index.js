@@ -20,6 +20,7 @@ router.use('/combo-slots', require('./comboSlots.routes'));
 router.use('/coupons', cachePublic(300), require('./coupons.routes'));              // 5 min
 router.use('/dynamic-pricing', cachePublic(300), require('./dynamicPricing.public.routes')); // 5 min
 router.use('/offers', cachePublic(300), require('./offers.routes'));                // 5 min
+router.use('/announcements', require('./announcements.routes'));  // No cache for news/announcements
 router.use('/pages', cachePublic(600), require('./pages.routes'));                  // 10 min
 router.use('/blogs', cachePublic(600), require('./blogs.routes'));                  // 10 min
 router.use('/banners', cachePublic(300), require('../user/routes/banners.routes')); // 5 min
@@ -27,7 +28,6 @@ router.use('/uploads', cachePublic(3600), require('./uploads.routes'));         
 router.use('/tickets', require('./ticketsvirtual.routes'));
 router.use('/', require('./gallery.public'));
 router.use('/', require('./pages.public'));
-router.use('/social', require('./instagram.routes'));
 router.use('/track', require('./tracking.routes'));
 router.use('/site-settings', cachePublic(1800), require('./siteSettings.routes')); // 30 min
 router.use('/payments', require('./payments.routes'));

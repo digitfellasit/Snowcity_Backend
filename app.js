@@ -21,10 +21,15 @@ app.use(express.json({ limit: process.env.MAX_JSON_SIZE || '2mb' }));
 app.use(express.urlencoded({ limit: process.env.MAX_URLENCODED_SIZE || '2mb', extended: true }));
 
 // Security & CORS — EARLY (BEFORE ROUTES!)
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginEmbedderPolicy: false,
+  })
+);
 app.use(compression());
 app.use(hpp());
-app.use(cors(corsOptions)); // ← FIXED: BEFORE ROUTES!
+app.use(cors(corsOptions));
 
 // Serve uploaded assets with aggressive caching (images rarely change)
 app.use(

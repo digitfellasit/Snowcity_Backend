@@ -19,6 +19,7 @@ async function loadUserScopes(userId) {
     page: [],
     blog: [],
     gallery: [],
+    announcement: [],
     module_permissions: [],
   };
   for (const row of rows) {
@@ -73,6 +74,7 @@ async function attachScopes(req, res, next) {
       page: ['*'],
       blog: ['*'],
       gallery: ['*'],
+      announcement: ['*'],
     };
     return next();
   }
@@ -87,6 +89,7 @@ async function attachScopes(req, res, next) {
       page: [],
       blog: [],
       gallery: [],
+      announcement: [],
     };
   }
 
@@ -99,6 +102,7 @@ async function attachScopes(req, res, next) {
     req.user.scopes.page = ['*'];
     req.user.scopes.blog = ['*'];
     req.user.scopes.gallery = ['*'];
+    req.user.scopes.announcement = ['*'];
   }
 
   next();

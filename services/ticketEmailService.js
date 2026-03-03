@@ -88,58 +88,59 @@ function buildItemsHtml(items = []) {
     }
   }
 
-  const rows = items.map((item) => {
-    const title = item.item_title || (item.item_type === 'Combo' ? 'Combo Booking' : 'Attraction Ticket');
+  const rows = items
+    .filter(item => !item.parent_booking_id)
+    .map((item) => {
+      const title = item.item_title || (item.item_type === 'Combo' ? 'Combo Booking' : 'Attraction Ticket');
 
-    // Debug logging
-    console.log('🔍 DEBUG Email Service item:', {
-      booking_id: item.booking_id,
-      slot_start_time: item.slot_start_time,
-      slot_end_time: item.slot_end_time,
-      booking_time: item.booking_time,
-      slot_label: item.slot_label
-    });
+      // Debug logging
+      console.log('🔍 DEBUG Email Service item:', {
+        booking_id: item.booking_id,
+        slot_start_time: item.slot_start_time,
+        slot_end_time: item.slot_end_time,
+        booking_time: item.booking_time,
+        slot_label: item.slot_label
+      });
 
-    let slotTime;
-    const hasSlotTimes = item.slot_start_time || item.slot_end_time;
-    if (hasSlotTimes) {
-      if (item.slot_start_time && item.slot_end_time) {
-        slotTime = `${formatTime12Hour(item.slot_start_time)} - ${formatTime12Hour(item.slot_end_time)}`;
-      } else if (item.booking_time) {
-        slotTime = formatTime12Hour(item.booking_time);
-      } else if (item.slot_label) {
-        slotTime = item.slot_label;
+      let slotTime;
+      const hasSlotTimes = item.slot_start_time || item.slot_end_time;
+      if (hasSlotTimes) {
+        if (item.slot_start_time && item.slot_end_time) {
+          slotTime = `${formatTime12Hour(item.slot_start_time)} - ${formatTime12Hour(item.slot_end_time)}`;
+        } else if (item.booking_time) {
+          slotTime = formatTime12Hour(item.booking_time);
+        } else if (item.slot_label) {
+          slotTime = item.slot_label;
+        } else {
+          slotTime = 'Open Slot';
+        }
       } else {
-        slotTime = 'Open Slot';
+        slotTime = null; // No time slot — will show just date + quantity
       }
-    } else {
-      slotTime = null; // No time slot — will show just date + quantity
-    }
 
-    const bookingDate = formatDate(item.booking_date);
-    const quantity = item.quantity || 1;
-    const addons = item.addons || [];
-    const addonsText = addons.length > 0
-      ? addons.map(addon => `×${addon.quantity || 1} ${addon.title || 'Addon'}`).join(', ')
-      : '-';
+      const bookingDate = formatDate(item.booking_date);
+      const quantity = item.quantity || 1;
+      const addons = item.addons || [];
+      const addonsText = addons.length > 0
+        ? addons.map(addon => `×${addon.quantity || 1} ${addon.title || 'Addon'}`).join(', ')
+        : '-';
 
-    // Build the sub-info line: date • [slot time if present] • pax • addons
-    const subInfoParts = [bookingDate];
-    if (slotTime) subInfoParts.push(slotTime);
-    subInfoParts.push(`Pax: ${quantity}`);
-    if (addonsText !== '-') subInfoParts.push(addonsText);
-    const subInfoStr = subInfoParts.join(' • ');
+      // Build the sub-info line: date • [slot time if present] • pax • addons
+      const subInfoParts = [bookingDate];
+      if (slotTime) subInfoParts.push(slotTime);
+      subInfoParts.push(`Pax: ${quantity}`);
+      if (addonsText !== '-') subInfoParts.push(addonsText);
+      const subInfoStr = subInfoParts.join(' • ');
 
-    return `
+      return `
       <div class="item-card">
         <div class="item-meta">
           <div class="item-title">${title}</div>
-          <div class="item-details">Booking ID: ${item.booking_id || item.booking_ref || '-'}</div>
           <div class="item-subinfo">${subInfoStr}</div>
         </div>
         <div class="item-amount">${formatMoney(item.final_amount || item.total_amount)}</div>
       </div>`;
-  }).join('');
+    }).join('');
 
   return rows;
 }

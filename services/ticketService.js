@@ -200,7 +200,13 @@ async function drawConsolidatedTicket(doc, data) {
   // Large watermark text "SNOW CITY" in faint white
   doc.save();
   doc.font('Helvetica-Bold').fontSize(64).fillColor(C.white).opacity(0.12)
-    .text('SNOW CITY', 0, bannerY + 35, { width: PW, align: 'center' });
+    .text('SNOW CITY', 0, bannerY + 15, { width: PW, align: 'center' });
+  doc.restore();
+
+  // "Your Booking is Confirmed!" text in the banner
+  doc.save();
+  doc.font('Helvetica-Bold').fontSize(32).fillColor(C.white)
+    .text('Your Booking is Confirmed!', 0, bannerY + 45, { width: PW, align: 'center' });
   doc.restore();
 
   // Wavy snow bottom simulation
@@ -248,7 +254,6 @@ async function drawConsolidatedTicket(doc, data) {
 
     let cardH = 85;
     if (hasAddons) cardH += 15 + (item.addons.length * 12);
-    if (isSnowPark) cardH += 25;
 
     if (y + cardH > PH - 140) {
       doc.addPage();
@@ -306,14 +311,6 @@ async function drawConsolidatedTicket(doc, data) {
         nextY += 12;
       });
       nextY += 5;
-    }
-
-    // Snow Park Specific Note
-    if (isSnowPark) {
-      const boxY = y + cardH - 25;
-      doc.roundedRect(M + 14, boxY, 300, 18, 4).fill('#E3F2FD');
-      doc.font('Helvetica').fontSize(7.5).fillColor('#1565C0')
-        .text('■ Arrive 15 mins early for jacket, boots & gloves • 45 mins snow access', M + 20, boxY + 6);
     }
 
     y += cardH + 15;
