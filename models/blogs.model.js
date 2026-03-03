@@ -66,6 +66,8 @@ function mapBlog(row) {
     image_url: row.image_url,
     image_alt: row.image_alt,
     author: row.author,
+    author_image_url: row.author_image_url,
+    author_description: row.author_description,
     meta_title: row.meta_title,
     meta_description: row.meta_description,
     meta_keywords: row.meta_keywords,
@@ -83,17 +85,17 @@ function mapBlog(row) {
   };
 }
 
-async function createBlog({ title, slug, content = null, image_url = null, image_alt = null, author = null, meta_title = null, meta_description = null, meta_keywords = null, section_type = 'none', section_ref_id = null, gallery = [], bulk_images = [], active = true, editor_mode = 'rich', raw_html = null, raw_css = null, raw_js = null, faq_items = [], head_schema = {}, body_schema = {}, footer_schema = {} }) {
+async function createBlog({ title, slug, content = null, image_url = null, image_alt = null, author = null, author_image_url = null, author_description = null, meta_title = null, meta_description = null, meta_keywords = null, section_type = 'none', section_ref_id = null, gallery = [], bulk_images = [], active = true, editor_mode = 'rich', raw_html = null, raw_css = null, raw_js = null, faq_items = [], head_schema = {}, body_schema = {}, footer_schema = {} }) {
   try {
     const faqPayload = Array.isArray(faq_items) ? JSON.stringify(faq_items) : (faq_items || '[]');
     const headSchemaPayload = head_schema || '';
     const bodySchemaPayload = body_schema || '';
     const footerSchemaPayload = footer_schema || '';
     const { rows } = await pool.query(
-      `INSERT INTO blogs (title, slug, content, image_url, image_alt, author, meta_title, meta_description, meta_keywords, section_type, section_ref_id, gallery, bulk_images, active, editor_mode, raw_html, raw_css, raw_js, faq_items, head_schema, body_schema, footer_schema)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, '[]'::jsonb), COALESCE($13, '[]'::jsonb), $14, $15, $16, $17, $18, COALESCE($19, '[]'::jsonb), COALESCE($20, ''), COALESCE($21, ''), COALESCE($22, ''))
+      `INSERT INTO blogs (title, slug, content, image_url, image_alt, author, author_image_url, author_description, meta_title, meta_description, meta_keywords, section_type, section_ref_id, gallery, bulk_images, active, editor_mode, raw_html, raw_css, raw_js, faq_items, head_schema, body_schema, footer_schema)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, COALESCE($14, '[]'::jsonb), COALESCE($15, '[]'::jsonb), $16, $17, $18, $19, $20, COALESCE($21, '[]'::jsonb), COALESCE($22, ''), COALESCE($23, ''), COALESCE($24, ''))
        RETURNING *`,
-      [title, slug, content, image_url, image_alt, author, meta_title, meta_description, meta_keywords, section_type, section_ref_id, Array.isArray(gallery) ? JSON.stringify(gallery) : gallery, Array.isArray(bulk_images) ? JSON.stringify(bulk_images) : bulk_images, active, editor_mode, raw_html, raw_css, raw_js, faqPayload, headSchemaPayload, bodySchemaPayload, footerSchemaPayload]
+      [title, slug, content, image_url, image_alt, author, author_image_url, author_description, meta_title, meta_description, meta_keywords, section_type, section_ref_id, Array.isArray(gallery) ? JSON.stringify(gallery) : gallery, Array.isArray(bulk_images) ? JSON.stringify(bulk_images) : bulk_images, active, editor_mode, raw_html, raw_css, raw_js, faqPayload, headSchemaPayload, bodySchemaPayload, footerSchemaPayload]
     );
     return mapBlog(rows[0]);
   } catch (err) {
