@@ -164,7 +164,7 @@ exports.adminForgotPassword = async (req, res, next) => {
     );
 
     // Send reset email
-    const frontendUrl = process.env.CLIENT_URL?.split(',')[0] || 'https://snowcity.vercel.app';
+    const frontendUrl = process.env.CLIENT_URL?.split(',')[0] || 'https://www.snowcityblr.com';
     const resetUrl = `${frontendUrl}/admin/reset-password?token=${resetToken}`;
     const mailOptions = {
       to: email,

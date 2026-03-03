@@ -30,8 +30,6 @@ function mapOffer(row) {
     get_target_id: row.get_target_id,
     get_discount_type: row.get_discount_type,
     get_discount_value: row.get_discount_value,
-    announcement: row.announcement,
-    announcement_active: !!row.announcement_active,
   };
 }
 
@@ -159,11 +157,9 @@ async function createOffer(payload = {}) {
         max_discount,
         valid_from,
         valid_to,
-        active,
-        announcement,
-        announcement_active
+        active
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10::date, $11, $12, $13)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10::date, $11)
       RETURNING *`,
     [
       title,
@@ -177,8 +173,6 @@ async function createOffer(payload = {}) {
       valid_from,
       valid_to,
       active,
-      payload.announcement || null,
-      payload.announcement_active !== false,
     ]
   );
 

@@ -109,8 +109,6 @@ function normalizePayload(body = {}) {
     valid_from,
     valid_to,
     active,
-    announcement: announcement || null,
-    announcement_active: announcement_active !== false,
     rules: Array.isArray(rules) ? rules.map(normalizeRule) : [],
   };
 }

@@ -1,9 +1,9 @@
 const DEFAULT_ORIGINS = [
   'https://app.snowcityblr.com',
   'https://app.snowcityblr.com',
-  'https://snowcity.vercel.app/',
-  'https://snowcity.vercel.app',
-  'https://snowcity.vercel.app',
+  'https://www.snowcityblr.com/',
+  'https://www.snowcityblr.com',
+  'https://www.snowcityblr.com',
   'https://app.snowcityblr.com',
   'https://snowcity.vercel.app',
   'https://qa.phicommerce.com',

@@ -148,15 +148,13 @@ async function buildTicketTemplateDataForOrder(orderId) {
   const attractionLines = [];
 
   attractionsByDate.forEach((attractions, date) => {
-    const attractionDetails = attractions.map(attr => {
+    attractions.forEach(attr => {
       const timePart = (attr.time && attr.time !== 'Open Entry') ? ` | ${attr.time}` : '';
-      return `${attr.title} — ${date}${timePart} | ${attr.qty} guest`;
-    }).join(', ');
-
-    attractionLines.push(attractionDetails);
+      attractionLines.push(`${attr.title} — ${date}${timePart} | ${attr.qty} guest`);
+    });
   });
 
-  const itemsText = attractionLines.length ? attractionLines.join(', ') : 'Booking details unavailable';
+  const itemsText = attractionLines.length ? attractionLines.join('\n') : 'Booking details unavailable';
 
   const addonMap = new Map();
   effectiveItems.forEach((it) => {
@@ -178,7 +176,7 @@ async function buildTicketTemplateDataForOrder(orderId) {
   const addonLines = Array.from(addonMap.values())
     .filter((x) => x.qty > 0)
     .sort((a, b) => String(a.name).localeCompare(String(b.name)))
-    .map((x) => `${x.name}(₹${x.price}) x ${x.qty}`);
+    .map((x) => `${x.name} (${x.price}) x ${x.qty}`);
   const addonsText = addonLines.length ? addonLines.join(', ') : 'None';
 
   const firstTicket = (items.find((x) => x.ticket_pdf) || {}).ticket_pdf || null;
@@ -259,7 +257,7 @@ async function sendTicketForOrder(orderId, { skipConsentCheck = false, force = f
     callbackData: `ticket-order-${orderId}`,
     type: 'Template',
     template: {
-      name: 'snow_city_bengaluru_booking_confirmationupdate',
+      name: 'ticket_confirmation_js',
       languageCode: 'en',
       headerValues: mediaUrl ? [mediaUrl] : [],
       bodyValues: [
