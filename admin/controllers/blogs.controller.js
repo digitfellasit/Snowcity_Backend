@@ -58,14 +58,22 @@ async function createBlog(req, res, next) {
     }
     const p = req.body || {};
     const payload = {
+      wp_id: p.wp_id || null,
       title: p.title,
       slug: p.slug,
       content: p.content || null,
-      image_url: p.image_url || null,
+      excerpt: p.excerpt || null,
+      featured_image: p.featured_image || null,
+      image_alt: p.image_alt || null,
       author: p.author || null,
+      author_image_url: p.author_image_url || null,
+      author_description: p.author_description || null,
       active: p.active !== undefined ? !!p.active : true,
-      meta_title: p.meta_title || null,
-      meta_description: p.meta_description || null,
+      categories: Array.isArray(p.categories) ? p.categories : [],
+      tags: Array.isArray(p.tags) ? p.tags : [],
+      status: p.status || 'publish',
+      seo_title: p.seo_title || null,
+      seo_description: p.seo_description || null,
       meta_keywords: p.meta_keywords || null,
       section_type: p.section_type || 'none',
       section_ref_id: p.section_ref_id || null,
@@ -79,6 +87,7 @@ async function createBlog(req, res, next) {
       head_schema: p.head_schema || '',
       body_schema: p.body_schema || '',
       footer_schema: p.footer_schema || '',
+      published_at: p.published_at || null,
     };
     const row = await blogService.createBlog(payload);
     res.status(201).json(row);
@@ -98,14 +107,22 @@ async function updateBlog(req, res, next) {
     }
     const p = req.body || {};
     const payload = {
+      wp_id: p.wp_id,
       title: p.title,
       slug: p.slug,
       content: p.content,
-      image_url: p.image_url,
+      excerpt: p.excerpt,
+      featured_image: p.featured_image,
+      image_alt: p.image_alt,
       author: p.author,
+      author_image_url: p.author_image_url,
+      author_description: p.author_description,
       active: p.active,
-      meta_title: p.meta_title,
-      meta_description: p.meta_description,
+      categories: Array.isArray(p.categories) ? p.categories : undefined,
+      tags: Array.isArray(p.tags) ? p.tags : undefined,
+      status: p.status,
+      seo_title: p.seo_title,
+      seo_description: p.seo_description,
       meta_keywords: p.meta_keywords,
       section_type: p.section_type,
       section_ref_id: p.section_ref_id,
@@ -119,6 +136,7 @@ async function updateBlog(req, res, next) {
       head_schema: p.head_schema,
       body_schema: p.body_schema,
       footer_schema: p.footer_schema,
+      published_at: p.published_at,
     };
     const row = await blogService.updateBlog(id, payload);
     if (!row) return res.status(404).json({ error: 'Blog not found' });
@@ -150,13 +168,21 @@ async function previewBlog(req, res, next) {
   try {
     const p = req.body || {};
     const out = {
+      wp_id: p.wp_id || null,
       title: p.title || '',
       slug: p.slug || '',
       content: p.content || null,
-      image_url: p.image_url || null,
+      excerpt: p.excerpt || null,
+      featured_image: p.featured_image || null,
+      image_alt: p.image_alt || null,
       author: p.author || null,
-      meta_title: p.meta_title || null,
-      meta_description: p.meta_description || null,
+      author_image_url: p.author_image_url || null,
+      author_description: p.author_description || null,
+      categories: Array.isArray(p.categories) ? p.categories : [],
+      tags: Array.isArray(p.tags) ? p.tags : [],
+      status: p.status || 'publish',
+      seo_title: p.seo_title || null,
+      seo_description: p.seo_description || null,
       meta_keywords: p.meta_keywords || null,
       section_type: p.section_type || 'none',
       section_ref_id: p.section_ref_id || null,
@@ -171,6 +197,7 @@ async function previewBlog(req, res, next) {
       head_schema: p.head_schema || '',
       body_schema: p.body_schema || '',
       footer_schema: p.footer_schema || '',
+      published_at: p.published_at || null,
       preview: true,
     };
     res.json(out);

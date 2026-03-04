@@ -93,21 +93,21 @@ function buildSeoHtml(data) {
     // Build head schema tags
     const headSchemaHtml = [
         buildJsonLdTag(siteSettings.organization_schema),
-        buildJsonLdTag(siteSettings.head_schema),
-        buildJsonLdTag(head_schema),
+        siteSettings.head_schema || '',
+        head_schema || '',
         buildFaqSchema(faq_items) ? `<script type="application/ld+json">${buildFaqSchema(faq_items)}</script>` : '',
     ].filter(Boolean).join('\n    ');
 
     // Build body schema
     const bodySchemaHtml = [
-        buildJsonLdTag(siteSettings.body_schema),
-        buildJsonLdTag(body_schema),
+        siteSettings.body_schema || '',
+        body_schema || '',
     ].filter(Boolean).join('\n    ');
 
     // Build footer schema
     const footerSchemaHtml = [
-        buildJsonLdTag(siteSettings.footer_schema),
-        buildJsonLdTag(footer_schema),
+        siteSettings.footer_schema || '',
+        footer_schema || '',
     ].filter(Boolean).join('\n    ');
 
     // Build FAQ visible section
