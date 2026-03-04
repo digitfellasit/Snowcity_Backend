@@ -179,17 +179,15 @@ function buildSeoHtml(data) {
     ${ogImage ? `<meta name="twitter:image" content="${escapeHtml(ogImage)}">` : ''}
     ${imageAlt ? `<meta name="twitter:image:alt" content="${escapeHtml(imageAlt)}">` : ''}
 
-    <!-- Preload fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
     <!-- Structured Data -->
     ${articleSchemaHtml}
     ${headSchemaHtml}
 
     <style>
-      body { font-family: 'DM Sans', 'Poppins', sans-serif; margin: 0; padding: 0; color: #1a1a2e; background: #f8fafc; }
+      body { font-family: 'Plus Jakarta Sans', sans-serif; margin: 0; padding: 0; color: #1a1a2e; background: #f8fafc; }
       .ssr-container { max-width: 800px; margin: 0 auto; padding: 2rem 1rem; }
       .ssr-container h1 { font-size: 2rem; margin-bottom: 1rem; }
       .ssr-container img { max-width: 100%; height: auto; border-radius: 12px; }
