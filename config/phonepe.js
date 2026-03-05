@@ -35,8 +35,8 @@ function normalizeBaseUrl(raw, fallback) {
   return (parts[0] || fallback || 'https://app.snowcityblr.com').replace(/\/+$/, '');
 }
 const APP_URL = normalizeBaseUrl(process.env.APP_URL, 'https://app.snowcityblr.com');
-const CLIENT_URL = (process.env.CLIENT_URL || 'https://www.snowcityblr.com').replace(/\/+$/, '');
-const FRONTEND_URL = (process.env.FRONTEND_URL || process.env.CLIENT_URL || 'https://www.snowcityblr.com').replace(/\/+$/, '');
+const CLIENT_URL = (process.env.CLIENT_URL || 'https://snowcityblr.com').replace(/\/+$/, '');
+const FRONTEND_URL = (process.env.FRONTEND_URL || process.env.CLIENT_URL || 'https://snowcityblr.com').replace(/\/+$/, '');
 
 // Callback / redirect URLs
 // CALLBACK_URL = backend webhook for server-to-server notification (no whitelisting needed)

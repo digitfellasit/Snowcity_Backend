@@ -1,11 +1,11 @@
 const DEFAULT_ORIGINS = [
   // Production
   'https://snowcityblr.com',
-  'https://www.snowcityblr.com',
+  'https://snowcityblr.com',
   'https://app.snowcityblr.com',
   'https://qa.phicommerce.com',
   // Local development
-  'https://www.snowcityblr.com',
+  'https://snowcityblr.com',
   'https://app.snowcityblr.com',
   'http://localhost:3000',
 ];

@@ -29,7 +29,7 @@ const resolveClientBaseUrl = () => {
     .split(',')
     .map((val) => String(val || '').trim())
     .filter(Boolean);
-  const fallback = 'https://www.snowcityblr.com';
+  const fallback = 'https://snowcityblr.com';
   const base = entries[0] || fallback;
   return base.replace(/\/$/, '');
 };
