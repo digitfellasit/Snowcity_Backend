@@ -563,6 +563,222 @@ async function getDetailedDailyAnalytics({ from = null, to = null, attraction_id
   }
 }
 
+// ─── OPERATIONS DASHBOARD SPECIFIC ───
+// Everything is based on booking_date (visit date).
+// Combo revenue is attributed to child attractions.
+// Add-on revenue is separated into non-ticketing.
+async function getOpsDashboardStats({ from, to }) {
+  const dateCond = from && to
+    ? `BETWEEN $1::date AND $2::date`
+    : `= CURRENT_DATE`;
+  const params = from && to ? [from, to] : [];
+
+  // §1 VISITOR SUMMARY — Use child bookings for per-attraction guest counts
+  // Child bookings (parent_booking_id IS NOT NULL) have individual attraction_id
+  // Parent combo bookings only have combo_id, so we use children for split
+  // For total guests, we use parent bookings (parent_booking_id IS NULL) to avoid double counting
+  const visitorSql = `
+    WITH child_guests AS (
+      SELECT
+        a.title,
+        COALESCE(SUM(b.quantity), 0) AS guests
+      FROM bookings b
+      JOIN attractions a ON a.attraction_id = b.attraction_id
+      WHERE b.booking_status <> 'Cancelled'
+        AND b.payment_status = 'Completed'
+        AND b.parent_booking_id IS NOT NULL
+        AND b.booking_date ${dateCond}
+      GROUP BY a.title
+    ),
+    standalone_guests AS (
+      SELECT
+        a.title,
+        COALESCE(SUM(b.quantity), 0) AS guests
+      FROM bookings b
+      JOIN attractions a ON a.attraction_id = b.attraction_id
+      WHERE b.booking_status <> 'Cancelled'
+        AND b.payment_status = 'Completed'
+        AND b.parent_booking_id IS NULL
+        AND b.item_type = 'Attraction'
+        AND b.booking_date ${dateCond}
+      GROUP BY a.title
+    ),
+    total AS (
+      SELECT COALESCE(SUM(b.quantity), 0) AS total_guests
+      FROM bookings b
+      WHERE b.booking_status <> 'Cancelled'
+        AND b.payment_status = 'Completed'
+        AND b.parent_booking_id IS NULL
+        AND b.booking_date ${dateCond}
+    ),
+    merged AS (
+      SELECT title, SUM(guests) AS guests FROM (
+        SELECT * FROM child_guests
+        UNION ALL
+        SELECT * FROM standalone_guests
+      ) x GROUP BY title
+    )
+    SELECT
+      (SELECT total_guests FROM total) AS total_guests,
+      COALESCE((SELECT SUM(guests) FROM merged WHERE title ILIKE '%snow%'), 0) AS snow_guests,
+      COALESCE((SELECT SUM(guests) FROM merged WHERE title ILIKE '%madlabs%' OR title ILIKE '%mad lab%'), 0) AS madlabs_guests,
+      COALESCE((SELECT SUM(guests) FROM merged WHERE title ILIKE '%eye%'), 0) AS eyelusion_guests,
+      COALESCE((SELECT SUM(guests) FROM merged WHERE title ILIKE '%devil%'), 0) AS devil_guests
+  `;
+
+  // §2 REVENUE SUMMARY — Based on booking_date (visit date)
+  // Ticketing = booking final_amount MINUS add-on prices (since total_amount includes addons)
+  // Non-Ticketing (Add-ons) = sum from booking_addons table
+  const revenueSql = `
+    WITH booking_totals AS (
+      SELECT
+        COALESCE(SUM(COALESCE(b.final_amount, b.total_amount, 0)), 0) AS grand_total
+      FROM bookings b
+      WHERE b.booking_status <> 'Cancelled'
+        AND b.payment_status = 'Completed'
+        AND b.parent_booking_id IS NULL
+        AND b.booking_date ${dateCond}
+    ),
+    addon_totals AS (
+      SELECT
+        COALESCE(SUM(ba.price * ba.quantity), 0) AS addon_total
+      FROM booking_addons ba
+      JOIN bookings b ON b.booking_id = ba.booking_id
+      WHERE b.booking_status <> 'Cancelled'
+        AND b.payment_status = 'Completed'
+        AND b.parent_booking_id IS NULL
+        AND b.booking_date ${dateCond}
+    )
+    SELECT
+      bt.grand_total - at.addon_total AS total_ticketing,
+      at.addon_total AS total_addons,
+      bt.grand_total AS grand_total
+    FROM booking_totals bt, addon_totals at
+  `;
+
+  // §3 ATTRACTION BREAKDOWN — Include combo child bookings per attraction
+  // Uses children (parent_booking_id IS NOT NULL) for combo attractions
+  // + standalone attraction bookings (parent_booking_id IS NULL, item_type = 'Attraction')
+  const attractionBreakdownSql = `
+    WITH all_attraction_bookings AS (
+      -- Standalone attraction bookings
+      SELECT b.quantity, COALESCE(b.final_amount, b.total_amount, 0) AS revenue, a.title
+      FROM bookings b
+      JOIN attractions a ON a.attraction_id = b.attraction_id
+      WHERE b.booking_status <> 'Cancelled'
+        AND b.payment_status = 'Completed'
+        AND b.parent_booking_id IS NULL
+        AND b.item_type = 'Attraction'
+        AND b.booking_date ${dateCond}
+      UNION ALL
+      -- Combo child bookings (attributed to each attraction)
+      SELECT b.quantity, COALESCE(b.final_amount, b.total_amount, 0) AS revenue, a.title
+      FROM bookings b
+      JOIN attractions a ON a.attraction_id = b.attraction_id
+      WHERE b.booking_status <> 'Cancelled'
+        AND b.payment_status = 'Completed'
+        AND b.parent_booking_id IS NOT NULL
+        AND b.booking_date ${dateCond}
+    )
+    SELECT
+      title,
+      COALESCE(SUM(quantity), 0) AS guests,
+      COALESCE(SUM(revenue), 0) AS revenue,
+      COUNT(*) AS tickets
+    FROM all_attraction_bookings
+    GROUP BY title
+    ORDER BY revenue DESC
+  `;
+
+  // §4 TRANSACTION SUMMARY — Based on booking_date (visit date)
+  const txnSummarySql = `
+    SELECT
+      COUNT(*) AS total_bookings_placed,
+      COALESCE(SUM(COALESCE(final_amount, total_amount, 0)), 0) AS total_revenue_placed,
+      COALESCE(SUM(quantity), 0) AS total_guests_placed
+    FROM bookings b
+    WHERE b.booking_status <> 'Cancelled'
+      AND b.payment_status = 'Completed'
+      AND b.parent_booking_id IS NULL
+      AND b.booking_date ${dateCond}
+  `;
+
+  // Transaction breakdown by attraction (visit date based)
+  const txnAttractionSql = `
+    WITH all_txn AS (
+      SELECT b.quantity, COALESCE(b.final_amount, b.total_amount, 0) AS value, a.title
+      FROM bookings b
+      JOIN attractions a ON a.attraction_id = b.attraction_id
+      WHERE b.booking_status <> 'Cancelled'
+        AND b.payment_status = 'Completed'
+        AND b.parent_booking_id IS NULL
+        AND b.item_type = 'Attraction'
+        AND b.booking_date ${dateCond}
+      UNION ALL
+      SELECT b.quantity, COALESCE(b.final_amount, b.total_amount, 0) AS value, a.title
+      FROM bookings b
+      JOIN attractions a ON a.attraction_id = b.attraction_id
+      WHERE b.booking_status <> 'Cancelled'
+        AND b.payment_status = 'Completed'
+        AND b.parent_booking_id IS NOT NULL
+        AND b.booking_date ${dateCond}
+    )
+    SELECT
+      title,
+      COUNT(*) AS bookings,
+      COALESCE(SUM(quantity), 0) AS guests,
+      COALESCE(SUM(value), 0) AS value
+    FROM all_txn
+    GROUP BY title
+    ORDER BY value DESC
+  `;
+
+  const [
+    { rows: [visitor] },
+    { rows: [revenue] },
+    { rows: attractionBreakdown },
+    { rows: [txnSummary] },
+    { rows: txnAttraction }
+  ] = await Promise.all([
+    pool.query(visitorSql, params),
+    pool.query(revenueSql, params),
+    pool.query(attractionBreakdownSql, params),
+    pool.query(txnSummarySql, params),
+    pool.query(txnAttractionSql, params),
+  ]);
+
+  return {
+    visitorSummary: {
+      totalGuests: Number(visitor.total_guests),
+      snow: Number(visitor.snow_guests),
+      madlabs: Number(visitor.madlabs_guests),
+      eyelusion: Number(visitor.eyelusion_guests),
+      devil: Number(visitor.devil_guests)
+    },
+    revenueSummary: {
+      ticketing: Number(revenue.total_ticketing),
+      addons: Number(revenue.total_addons),
+    },
+    attractionBreakdown: attractionBreakdown.map(r => ({
+      title: r.title,
+      guests: Number(r.guests),
+      revenue: Number(r.revenue),
+      tickets: Number(r.tickets)
+    })),
+    transactionSummary: {
+      bookingsPlaced: Number(txnSummary.total_bookings_placed),
+      revenuePlaced: Number(txnSummary.total_revenue_placed),
+      guestsPlaced: Number(txnSummary.total_guests_placed),
+      attractions: txnAttraction.map(r => ({
+        title: r.title,
+        bookings: Number(r.bookings),
+        guests: Number(r.guests),
+        value: Number(r.value)
+      }))
+    }
+  };
+}
+
 module.exports = {
   sanitizeGranularity,
   getDashboardSummary,
@@ -581,4 +797,247 @@ module.exports = {
   getAttractionBreakdown,
   getSplitData,
   getDetailedDailyAnalytics,
+  getOpsDashboardStats,
+  getTransactionReport,
+  getGuestReport,
 };
+
+// ─── TRANSACTION REPORT ───
+// Returns individual booking line items for the report table
+async function getTransactionReport({ from, to, type = 'both' }) {
+  const dateCond = from && to
+    ? `BETWEEN $1::date AND $2::date`
+    : `= CURRENT_DATE`;
+  const params = from && to ? [from, to] : [];
+
+  let sql;
+  if (type === 'addons') {
+    // Add-on line items only
+    sql = `
+      SELECT
+        b.booking_id,
+        b.created_at,
+        b.booking_date,
+        ad.title AS description,
+        'Add-on' AS item_type,
+        ba.price AS unit_price,
+        0 AS discount,
+        ba.quantity,
+        (ba.price * ba.quantity) AS nett
+      FROM booking_addons ba
+      JOIN bookings b ON b.booking_id = ba.booking_id
+      JOIN addons ad ON ad.addon_id = ba.addon_id
+      WHERE b.booking_status <> 'Cancelled'
+        AND b.payment_status = 'Completed'
+        AND b.parent_booking_id IS NULL
+        AND b.booking_date ${dateCond}
+      ORDER BY b.created_at DESC
+    `;
+  } else if (type === 'ticketing') {
+    // Ticketing only (standalone attractions + combo parents)
+    sql = `
+      SELECT
+        b.booking_id,
+        b.created_at,
+        b.booking_date,
+        COALESCE(a.title, c.name, 'Booking #' || b.booking_id) AS description,
+        b.item_type,
+        CASE WHEN b.quantity > 0 THEN ROUND(COALESCE(b.total_amount, 0) / b.quantity, 2) ELSE 0 END AS unit_price,
+        COALESCE(b.discount_amount, 0) AS discount,
+        b.quantity,
+        COALESCE(b.final_amount, b.total_amount, 0)
+          - COALESCE((SELECT SUM(ba2.price * ba2.quantity) FROM booking_addons ba2 WHERE ba2.booking_id = b.booking_id), 0)
+          AS nett
+      FROM bookings b
+      LEFT JOIN attractions a ON a.attraction_id = b.attraction_id
+      LEFT JOIN combos c ON c.combo_id = b.combo_id
+      WHERE b.booking_status <> 'Cancelled'
+        AND b.payment_status = 'Completed'
+        AND b.parent_booking_id IS NULL
+        AND b.booking_date ${dateCond}
+      ORDER BY b.created_at DESC
+    `;
+  } else {
+    // Both: ticketing rows + addon rows
+    sql = `
+      (
+        SELECT
+          b.booking_id,
+          b.created_at,
+          b.booking_date,
+          COALESCE(a.title, c.name, 'Booking #' || b.booking_id) AS description,
+          b.item_type,
+          CASE WHEN b.quantity > 0 THEN ROUND(COALESCE(b.total_amount, 0) / b.quantity, 2) ELSE 0 END AS unit_price,
+          COALESCE(b.discount_amount, 0) AS discount,
+          b.quantity,
+          COALESCE(b.final_amount, b.total_amount, 0)
+            - COALESCE((SELECT SUM(ba2.price * ba2.quantity) FROM booking_addons ba2 WHERE ba2.booking_id = b.booking_id), 0)
+            AS nett
+        FROM bookings b
+        LEFT JOIN attractions a ON a.attraction_id = b.attraction_id
+        LEFT JOIN combos c ON c.combo_id = b.combo_id
+        WHERE b.booking_status <> 'Cancelled'
+          AND b.payment_status = 'Completed'
+          AND b.parent_booking_id IS NULL
+          AND b.booking_date ${dateCond}
+      )
+      UNION ALL
+      (
+        SELECT
+          b.booking_id,
+          b.created_at,
+          b.booking_date,
+          ad.title AS description,
+          'Add-on' AS item_type,
+          ba.price AS unit_price,
+          0 AS discount,
+          ba.quantity,
+          (ba.price * ba.quantity) AS nett
+        FROM booking_addons ba
+        JOIN bookings b ON b.booking_id = ba.booking_id
+        JOIN addons ad ON ad.addon_id = ba.addon_id
+        WHERE b.booking_status <> 'Cancelled'
+          AND b.payment_status = 'Completed'
+          AND b.parent_booking_id IS NULL
+          AND b.booking_date ${dateCond}
+      )
+      ORDER BY created_at DESC
+    `;
+  }
+
+  const { rows } = await pool.query(sql, params);
+
+  // Compute summary totals
+  let totalQty = 0, totalGross = 0, totalDisc = 0, totalNett = 0;
+  rows.forEach(r => {
+    totalQty += Number(r.quantity);
+    totalGross += Number(r.unit_price) * Number(r.quantity);
+    totalDisc += Number(r.discount);
+    totalNett += Number(r.nett);
+  });
+
+  return {
+    rows: rows.map((r, i) => ({
+      sno: i + 1,
+      bookingId: r.booking_id,
+      bookingDate: r.created_at,
+      visitDate: r.booking_date,
+      description: r.description,
+      itemType: r.item_type,
+      unitPrice: Number(r.unit_price),
+      discount: Number(r.discount),
+      quantity: Number(r.quantity),
+      nett: Number(r.nett),
+    })),
+    summary: {
+      totalRecords: rows.length,
+      totalQty,
+      totalGross: Math.round(totalGross),
+      totalDiscount: Math.round(totalDisc),
+      totalNett: Math.round(totalNett),
+      avgPerTicket: totalQty > 0 ? Math.round(totalNett / totalQty) : 0,
+    }
+  };
+}
+
+// ─── GUEST REPORT ───
+// Returns per-date guest count breakdown by attraction
+async function getGuestReport({ from, to }) {
+  const dateCond = from && to
+    ? `BETWEEN $1::date AND $2::date`
+    : `= CURRENT_DATE`;
+  const params = from && to ? [from, to] : [];
+
+  const sql = `
+    WITH child_guests AS (
+      SELECT
+        b.booking_date,
+        a.title,
+        COALESCE(SUM(b.quantity), 0) AS guests,
+        COALESCE(SUM(COALESCE(b.final_amount, b.total_amount, 0)), 0) AS revenue
+      FROM bookings b
+      JOIN attractions a ON a.attraction_id = b.attraction_id
+      WHERE b.booking_status <> 'Cancelled'
+        AND b.payment_status = 'Completed'
+        AND b.parent_booking_id IS NOT NULL
+        AND b.booking_date ${dateCond}
+      GROUP BY b.booking_date, a.title
+    ),
+    standalone_guests AS (
+      SELECT
+        b.booking_date,
+        a.title,
+        COALESCE(SUM(b.quantity), 0) AS guests,
+        COALESCE(SUM(COALESCE(b.final_amount, b.total_amount, 0)), 0) AS revenue
+      FROM bookings b
+      JOIN attractions a ON a.attraction_id = b.attraction_id
+      WHERE b.booking_status <> 'Cancelled'
+        AND b.payment_status = 'Completed'
+        AND b.parent_booking_id IS NULL
+        AND b.item_type = 'Attraction'
+        AND b.booking_date ${dateCond}
+      GROUP BY b.booking_date, a.title
+    ),
+    addon_counts AS (
+      SELECT
+        b.booking_date,
+        COUNT(*) AS addon_orders
+      FROM booking_addons ba
+      JOIN bookings b ON b.booking_id = ba.booking_id
+      WHERE b.booking_status <> 'Cancelled'
+        AND b.payment_status = 'Completed'
+        AND b.parent_booking_id IS NULL
+        AND b.booking_date ${dateCond}
+      GROUP BY b.booking_date
+    ),
+    merged AS (
+      SELECT booking_date, title, SUM(guests) AS guests, SUM(revenue) AS revenue
+      FROM (SELECT * FROM child_guests UNION ALL SELECT * FROM standalone_guests) x
+      GROUP BY booking_date, title
+    ),
+    dates AS (
+      SELECT DISTINCT booking_date FROM bookings
+      WHERE booking_status <> 'Cancelled' AND payment_status = 'Completed'
+        AND booking_date ${dateCond}
+    )
+    SELECT
+      d.booking_date,
+      COALESCE(SUM(m.guests) FILTER (WHERE m.title ILIKE '%snow%'), 0) AS snow,
+      COALESCE(SUM(m.guests) FILTER (WHERE m.title ILIKE '%madlabs%' OR m.title ILIKE '%mad lab%'), 0) AS mad,
+      COALESCE(SUM(m.guests) FILTER (WHERE m.title ILIKE '%eye%'), 0) AS eye,
+      COALESCE(SUM(m.guests) FILTER (WHERE m.title ILIKE '%devil%'), 0) AS devil,
+      COALESCE(ac.addon_orders, 0) AS fb,
+      COALESCE(SUM(m.guests), 0) AS total,
+      COALESCE(SUM(m.revenue), 0) AS amt
+    FROM dates d
+    LEFT JOIN merged m ON m.booking_date = d.booking_date
+    LEFT JOIN addon_counts ac ON ac.booking_date = d.booking_date
+    GROUP BY d.booking_date, ac.addon_orders
+    ORDER BY d.booking_date DESC
+  `;
+
+  const { rows } = await pool.query(sql, params);
+
+  return {
+    rows: rows.map((r, i) => ({
+      sno: i + 1,
+      date: r.booking_date,
+      snow: Number(r.snow),
+      mad: Number(r.mad),
+      eye: Number(r.eye),
+      devil: Number(r.devil),
+      fb: Number(r.fb),
+      total: Number(r.total),
+      amt: Number(r.amt),
+    })),
+    summary: {
+      snow: rows.reduce((a, r) => a + Number(r.snow), 0),
+      mad: rows.reduce((a, r) => a + Number(r.mad), 0),
+      eye: rows.reduce((a, r) => a + Number(r.eye), 0),
+      devil: rows.reduce((a, r) => a + Number(r.devil), 0),
+      fb: rows.reduce((a, r) => a + Number(r.fb), 0),
+      total: rows.reduce((a, r) => a + Number(r.total), 0),
+      amt: rows.reduce((a, r) => a + Number(r.amt), 0),
+    }
+  };
+}

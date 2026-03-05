@@ -73,3 +73,37 @@ exports.getTopAttractions = async (req, res, next) => {
     next(err);
   }
 };
+
+// Operations Dashboard specific data
+exports.getOpsDashboard = async (req, res, next) => {
+  try {
+    const { from = null, to = null } = req.query;
+    // We are currently ignoring scopes for Ops Dashboard specifically since it's a global counter overview
+    const data = await adminModel.getOpsDashboardStats({ from, to });
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Transaction Report
+exports.getTransactionReport = async (req, res, next) => {
+  try {
+    const { from = null, to = null, type = 'both' } = req.query;
+    const data = await adminModel.getTransactionReport({ from, to, type });
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Guest Report
+exports.getGuestReport = async (req, res, next) => {
+  try {
+    const { from = null, to = null } = req.query;
+    const data = await adminModel.getGuestReport({ from, to });
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+};

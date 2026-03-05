@@ -35,8 +35,8 @@ function normalizeBaseUrl(raw, fallback) {
   return (parts[0] || fallback || 'https://app.snowcityblr.com').replace(/\/+$/, '');
 }
 const APP_URL = normalizeBaseUrl(process.env.APP_URL, 'https://app.snowcityblr.com');
-const CLIENT_URL = (process.env.CLIENT_URL || 'https://snowcityblr.com').replace(/\/+$/, '');
-const FRONTEND_URL = (process.env.FRONTEND_URL || process.env.CLIENT_URL || 'https://snowcityblr.com').replace(/\/+$/, '');
+const CLIENT_URL = (process.env.CLIENT_URL || 'https://snowcity.vercel.app').replace(/\/+$/, '');
+const FRONTEND_URL = (process.env.FRONTEND_URL || process.env.CLIENT_URL || 'https://snowcity.vercel.app').replace(/\/+$/, '');
 
 // Callback / redirect URLs
 // CALLBACK_URL = backend webhook for server-to-server notification (no whitelisting needed)
@@ -177,8 +177,8 @@ async function initiatePayment({
     amount: amountInPaise,
     expireAfter: 1200,                  // 20 min
     metaInfo: {
-      udf1: merchantUserId,
-      udf2: mobileNumber
+      udf1: String(merchantUserId || 'GUEST'),
+      udf2: String(mobileNumber || '')
     },
     paymentFlow: {
       type: 'PG_CHECKOUT',
@@ -196,7 +196,7 @@ async function initiatePayment({
     merchantOrderId: merchantTransactionId,
     amount: amountInPaise,
     endpoint: payEndpoint,
-    redirectUrl: REDIRECT_URL
+    redirectUrl: redirectUrl
   });
 
   try {

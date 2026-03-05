@@ -73,7 +73,7 @@ exports.listBookings = async function listBookings(req, res, next) {
 
     console.time('BookingsList Query Build');
 
-    const comboTitleExpr = `COALESCE(NULLIF(CONCAT_WS(' + ', NULLIF(a1.title, ''), NULLIF(a2.title, '')), ''), CONCAT('Combo #', c.combo_id::text))`;
+    const comboTitleExpr = `COALESCE(c.name, NULLIF(CONCAT_WS(' + ', NULLIF(a1.title, ''), NULLIF(a2.title, '')), ''), CONCAT('Combo #', c.combo_id::text))`;
     const itemTitleExpr = `CASE WHEN b.item_type = 'Combo' THEN ${comboTitleExpr} ELSE a.title END`;
 
     // ── Search (ref, order_ref, user name, email, phone) ──
@@ -94,14 +94,14 @@ exports.listBookings = async function listBookings(req, res, next) {
     }
 
     // ── Payment status ──
-    if (payment_status && ['Pending', 'Completed', 'Failed', 'Cancelled'].includes(payment_status)) {
+    if (payment_status && ['Pending', 'Completed', 'Failed', 'Cancelled', 'INITIATED', 'SUCCESS', 'TIMED_OUT'].includes(payment_status)) {
       where.push(`b.payment_status = $${i}`);
       params.push(payment_status);
       i++;
     }
 
     // ── Booking status ──
-    if (booking_status && ['Booked', 'Redeemed', 'Expired', 'Cancelled'].includes(booking_status)) {
+    if (booking_status && ['Booked', 'Redeemed', 'Expired', 'Cancelled', 'PENDING_PAYMENT', 'CONFIRMED', 'ABANDONED', 'REFUNDED'].includes(booking_status)) {
       where.push(`b.booking_status = $${i}`);
       params.push(booking_status);
       i++;
@@ -190,6 +190,9 @@ exports.listBookings = async function listBookings(req, res, next) {
       i++;
     }
 
+    // ── Only main items ──
+    where.push(`b.parent_booking_id IS NULL`);
+
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const joins = `
       LEFT JOIN users u ON u.user_id = b.user_id
@@ -215,6 +218,7 @@ exports.listBookings = async function listBookings(req, res, next) {
         ${comboTitleExpr} AS combo_title,
         o.title AS offer_title,
         ${itemTitleExpr} AS item_title,
+        b.ticket_status,
         b.slot_start_time,
         b.slot_end_time,
         b.slot_label
@@ -313,6 +317,7 @@ exports.listBookings = async function listBookings(req, res, next) {
         ticket_pdf: row.ticket_pdf,
         whatsapp_sent: row.whatsapp_sent,
         email_sent: row.email_sent,
+        ticket_status: row.ticket_status || 'NOT_REDEEMED',
         addons: addonsMap[row.booking_id] || [],
       });
       orderGroup.total_amount += Number(row.total_amount || 0);
@@ -320,15 +325,21 @@ exports.listBookings = async function listBookings(req, res, next) {
     }
 
     // Flatten to array and build combined item_title
-    const grouped = Array.from(orderMap.values()).map(order => ({
-      ...order,
-      item_title: order.items.map(it => it.item_title).filter(Boolean).join(', '),
-      item_count: order.items.length,
-      quantity: order.items.reduce((s, it) => s + (it.quantity || 1), 0),
-      // Keep first booking_id for compatibility
-      booking_id: order.items[0]?.booking_id,
-      booking_ref: order.items[0]?.booking_ref,
-    }));
+    const grouped = Array.from(orderMap.values()).map(order => {
+      // Use the most meaningful ticket_status from items
+      const anyRedeemed = order.items.some(it => it.ticket_status === 'REDEEMED');
+      const allRedeemed = order.items.every(it => it.ticket_status === 'REDEEMED');
+      return {
+        ...order,
+        item_title: order.items.map(it => it.item_title).filter(Boolean).join(', '),
+        item_count: order.items.length,
+        quantity: order.items.reduce((s, it) => s + (it.quantity || 1), 0),
+        ticket_status: allRedeemed ? 'REDEEMED' : (anyRedeemed ? 'PARTIAL' : 'NOT_REDEEMED'),
+        // Keep first booking_id for compatibility
+        booking_id: order.items[0]?.booking_id,
+        booking_ref: order.items[0]?.booking_ref,
+      };
+    });
 
     const total = Number(countRes.rows[0]?.count || 0);
     res.json({
@@ -346,7 +357,7 @@ exports.getBookingById = async function getBookingById(req, res, next) {
     if (!Number.isInteger(id) || id <= 0) {
       return res.status(400).json({ error: 'Invalid booking ID' });
     }
-    const comboTitleExpr = `COALESCE(NULLIF(CONCAT_WS(' + ', NULLIF(a1.title, ''), NULLIF(a2.title, '')), ''), CONCAT('Combo #', c.combo_id::text))`;
+    const comboTitleExpr = `COALESCE(c.name, NULLIF(CONCAT_WS(' + ', NULLIF(a1.title, ''), NULLIF(a2.title, '')), ''), CONCAT('Combo #', c.combo_id::text))`;
     const itemTitleExpr = `CASE WHEN b.item_type = 'Combo' THEN ${comboTitleExpr} ELSE a.title END`;
 
     // First try to find as booking_id, then as order_id
@@ -435,6 +446,7 @@ exports.getBookingById = async function getBookingById(req, res, next) {
       discount_amount: Number(row.discount_amount || 0),
       booking_status: row.booking_status,
       payment_status: row.payment_status,
+      ticket_status: row.ticket_status || 'NOT_REDEEMED',
       booking_date: row.booking_date,
       slot_start_time: row.slot_start_time,
       slot_end_time: row.slot_end_time,
@@ -486,7 +498,9 @@ exports.getBookingById = async function getBookingById(req, res, next) {
         paid: finalAmount,
       },
       booking_date: items[0]?.booking_date || order.created_at,
-      booking_status: items[0]?.booking_status || 'Booked',
+      booking_status: items[0]?.booking_status || 'PENDING_PAYMENT',
+      ticket_status: items.every(it => it.ticket_status === 'REDEEMED') ? 'REDEEMED'
+        : items.some(it => it.ticket_status === 'REDEEMED') ? 'PARTIAL' : 'NOT_REDEEMED',
       items,
       activity: activityRes.rows.map(log => ({
         log_id: log.log_id,
@@ -619,6 +633,7 @@ exports.updateBooking = async function updateBooking(req, res, next) {
       'payment_mode',
       'payment_ref',
       'booking_status',
+      'ticket_status',
       'ticket_pdf',
       'whatsapp_sent',
       'email_sent',
@@ -638,16 +653,37 @@ exports.updateBooking = async function updateBooking(req, res, next) {
       return res.status(400).json({ error: 'payment_ref is required for Completed payments' });
     }
 
+    // Ticket status validation: can only be changed to REDEEMED if booking is CONFIRMED
+    if (payload.ticket_status && payload.ticket_status === 'REDEEMED') {
+      const currentBooking = current || await bookingsModel.getBookingById(resolvedBookingId);
+      if (currentBooking && (currentBooking.booking_status !== 'CONFIRMED' && currentBooking.booking_status !== 'Booked')) {
+        return res.status(400).json({ error: 'Ticket can only be redeemed when booking status is CONFIRMED or Booked' });
+      }
+    }
+
     // If propagate: update ALL bookings in the order in one query
-    if (req.body.propagate && payload.booking_status && resolvedOrderId) {
+    if (req.body.propagate && resolvedOrderId) {
       try {
-        const result = await pool.query(
-          `UPDATE bookings SET booking_status = $1, updated_at = NOW()
-           WHERE order_id = $2
-           RETURNING booking_id`,
-          [payload.booking_status, resolvedOrderId]
-        );
-        console.log(`✅ Propagated booking_status="${payload.booking_status}" to ${result.rowCount} bookings in order_id=${resolvedOrderId}`);
+        // Propagate booking_status if provided
+        if (payload.booking_status) {
+          const result = await pool.query(
+            `UPDATE bookings SET booking_status = $1, updated_at = NOW()
+             WHERE order_id = $2
+             RETURNING booking_id`,
+            [payload.booking_status, resolvedOrderId]
+          );
+          console.log(`✅ Propagated booking_status="${payload.booking_status}" to ${result.rowCount} bookings in order_id=${resolvedOrderId}`);
+        }
+        // Propagate ticket_status if provided
+        if (payload.ticket_status) {
+          const result = await pool.query(
+            `UPDATE bookings SET ticket_status = $1, updated_at = NOW()
+             WHERE order_id = $2
+             RETURNING booking_id`,
+            [payload.ticket_status, resolvedOrderId]
+          );
+          console.log(`✅ Propagated ticket_status="${payload.ticket_status}" to ${result.rowCount} bookings in order_id=${resolvedOrderId}`);
+        }
       } catch (propErr) {
         console.error('Failed to propagate status:', propErr?.message || propErr);
       }

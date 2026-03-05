@@ -1,11 +1,11 @@
 const DEFAULT_ORIGINS = [
   // Production
-  'https://snowcityblr.com',
-  'https://snowcityblr.com',
+  'https://snowcity.vercel.app',
+  'https://snowcity.vercel.app',
   'https://app.snowcityblr.com',
   'https://qa.phicommerce.com',
   // Local development
-  'https://snowcityblr.com',
+  'https://snowcity.vercel.app',
   'https://app.snowcityblr.com',
   'http://localhost:3000',
 ];

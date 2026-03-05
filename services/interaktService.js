@@ -58,7 +58,8 @@ function formatDateIN(d) {
 }
 
 function formatSlotRange(row) {
-  const start = formatTime12h(row?.slot_start_time || row?.start_time || row?.booking_time);
+  // Only use actual slot times, NOT booking_time (which is just when the booking was created)
+  const start = formatTime12h(row?.slot_start_time || row?.start_time);
   const end = formatTime12h(row?.slot_end_time || row?.end_time);
 
   if (start && end) {
@@ -70,7 +71,7 @@ function formatSlotRange(row) {
   if (row?.slot_label) {
     return String(row.slot_label);
   }
-  return 'Open Entry';
+  return '';
 }
 
 function resolveMediaUrl(ticketPath) {
@@ -149,12 +150,12 @@ async function buildTicketTemplateDataForOrder(orderId) {
 
   attractionsByDate.forEach((attractions, date) => {
     attractions.forEach(attr => {
-      const timePart = (attr.time && attr.time !== 'Open Entry') ? ` | ${attr.time}` : '';
+      const timePart = attr.time ? ` | ${attr.time}` : '';
       attractionLines.push(`${attr.title} — ${date}${timePart} | ${attr.qty} guest`);
     });
   });
 
-  const itemsText = attractionLines.length ? attractionLines.join('\n') : 'Booking details unavailable';
+  const itemsText = attractionLines.length ? attractionLines.join(' || ') : 'Booking details unavailable';
 
   const addonMap = new Map();
   effectiveItems.forEach((it) => {

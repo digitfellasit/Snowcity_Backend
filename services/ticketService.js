@@ -1,7 +1,6 @@
 'use strict';
 
 const PDFDocument = require('pdfkit');
-const QRCode = require('qrcode');
 const dayjs = require('dayjs');
 const path = require('path');
 const fs = require('fs');
@@ -12,35 +11,38 @@ const s3Service = require('./storage/s3Service');
 
 // ---------- Configuration ----------
 const ASSET_DIR = path.resolve(__dirname, '../utils');
-const LOGO_PATH = path.join(ASSET_DIR, 'loading.png');  // Snowman mascot
-const BG_PATH = path.join(ASSET_DIR, 'ticket', 'ticket-bg.png');
+const LOGO_PATH = path.join(ASSET_DIR, 'loading.png');       // Snow City logo
+const BG_PATH   = path.join(ASSET_DIR, 'ticket', 'ticket-bg.jpg'); // Banner background
 
 // ── Color Palette ──────────────────────────────────────────────────
 const C = {
-  bannerStart: '#0099FF',  // Deep blue gradient start
-  bannerEnd: '#1A8FE3',  // Light blue gradient end
-  footerBg: '#0099FF',  // Dark navy footer
-  accent: '#F57C00',  // Orange for total
-  snowPark: '#1565C0',  // Blue
-  madlabs: '#7B1FA2',  // Purple
-  eyelusion: '#00897B',  // Teal
-  defaultColor: '#1565C0',  // Fallback blue
-  text: '#222222',
-  lightText: '#666666',
-  veryLight: '#999999',
-  white: '#FFFFFF',
-  infoBg: '#E3F2FD',  // Light sky-blue info box background
-  cardBorder: '#E0E0E0',
-  pageBg: '#FFFFFF',
+  navy:         '#030D1F',   // Deep navy (header bg, footer)
+  bannerBlue:   '#0057B8',   // Primary blue banner
+  accent:       '#FFB800',   // Golden yellow (highlights, "is" word)
+  snowPark:     '#1565C0',
+  madlabs:      '#7B1FA2',
+  eyelusion:    '#00897B',
+  defaultColor: '#1565C0',
+  text:         '#1A1A2E',
+  lightText:    '#555577',
+  veryLight:    '#8888AA',
+  white:        '#FFFFFF',
+  offWhite:     '#F4F7FC',
+  cardBg:       '#FFFFFF',
+  cardBorder:   '#DDE3F0',
+  infoBg:       '#EBF4FF',
+  paidGreen:    '#1DB954',
+  tagBg:        '#FFF3CD',
+  tagText:      '#856404',
 };
 
 // ── Attraction color map ───────────────────────────────────────────
 const ATTRACTION_COLORS = {
-  'snow park': C.snowPark,
-  'snowpark': C.snowPark,
-  'madlabs': C.madlabs,
-  'mad labs': C.madlabs,
-  'eyelusion': C.eyelusion,
+  'snow park':  C.snowPark,
+  'snowpark':   C.snowPark,
+  'madlabs':    C.madlabs,
+  'mad labs':   C.madlabs,
+  'eyelusion':  C.eyelusion,
   'eye lusion': C.eyelusion,
 };
 
@@ -53,9 +55,8 @@ function getAttractionColor(title) {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
-const exists = (p) => { try { return p && fs.existsSync(p); } catch { return false; } };
-const money = (n) => `Rs. ${Number(n || 0).toLocaleString('en-IN')}`;
-const fmtDate = (d) => dayjs(d).format('ddd, D MMM YYYY');
+const exists     = (p) => { try { return p && fs.existsSync(p); } catch { return false; } };
+const money      = (n) => `Rs. ${Number(n || 0).toLocaleString('en-IN')}`;
 const fmtDateShort = (d) => dayjs(d).format('DD MMM YYYY');
 
 function formatTime(t) {
@@ -73,18 +74,31 @@ function formatTime(t) {
 
 function getSlotDisplay(row) {
   const start = formatTime(row.slot_start_time);
-  const end = formatTime(row.slot_end_time);
+  const end   = formatTime(row.slot_end_time);
   if (start && end) return `${start} – ${end}`;
   const legacyStart = formatTime(row.start_time);
-  const legacyEnd = formatTime(row.end_time);
+  const legacyEnd   = formatTime(row.end_time);
   if (legacyStart && legacyEnd) return `${legacyStart} – ${legacyEnd}`;
   const bookingTime = formatTime(row.booking_time);
   if (bookingTime) return bookingTime;
   return row.slot_label || 'Open Entry';
 }
 
-// ── Data Fetching (Order-Centric) ──────────────────────────────────
+// ── Pill / Badge helper ────────────────────────────────────────────
+function drawPill(doc, x, y, text, bgColor, textColor, fontSize = 7.5) {
+  const pad = 8;
+  doc.save();
+  doc.font('Helvetica').fontSize(fontSize);
+  const tw = doc.widthOfString(text);
+  const pillW = tw + pad * 2;
+  const pillH = 14;
+  doc.roundedRect(x, y, pillW, pillH, pillH / 2).fill(bgColor);
+  doc.fillColor(textColor).text(text, x + pad, y + 3, { lineBreak: false });
+  doc.restore();
+  return pillW + 6; // return width + gap
+}
 
+// ── Data Fetching (Order-Centric) ──────────────────────────────────
 async function getFullOrderData(bookingId) {
   const orderRes = await pool.query(
     `SELECT order_id FROM bookings WHERE booking_id = $1`,
@@ -96,8 +110,7 @@ async function getFullOrderData(bookingId) {
   const order = await bookingsModel.getOrderWithDetails(orderId);
   if (!order) return null;
 
-  // Fetch guest info from users table
-  let guestName = 'Guest';
+  let guestName  = 'Guest';
   let guestPhone = '';
   let guestEmail = '';
   if (order.user_id) {
@@ -107,7 +120,7 @@ async function getFullOrderData(bookingId) {
         [order.user_id]
       );
       if (userRes.rows.length) {
-        guestName = userRes.rows[0].name || 'Guest';
+        guestName  = userRes.rows[0].name  || 'Guest';
         guestPhone = userRes.rows[0].phone || '';
         guestEmail = userRes.rows[0].email || '';
       }
@@ -120,16 +133,16 @@ async function getFullOrderData(bookingId) {
       ...item,
       item_title: item.item_type === 'Combo'
         ? (item.combo_title || item.combo_name || item.item_title || 'Combo Deal')
-        : (item.item_title || item.attraction_title || 'Entry Ticket')
+        : (item.item_title || item.attraction_title || 'Entry Ticket'),
     }));
 
   return {
-    orderId: order.order_id,
-    orderRef: order.order_ref,
-    totalAmount: order.final_amount ?? order.total_amount,
+    orderId:        order.order_id,
+    orderRef:       order.order_ref,
+    totalAmount:    order.final_amount ?? order.total_amount,
     discountAmount: order.discount_amount || 0,
-    couponCode: order.coupon_code || null,
-    orderDate: order.created_at,
+    couponCode:     order.coupon_code || null,
+    orderDate:      order.created_at,
     guestName,
     guestPhone,
     guestEmail,
@@ -138,271 +151,383 @@ async function getFullOrderData(bookingId) {
 }
 
 // ── Drawing Logic ──────────────────────────────────────────────────
-
 async function drawConsolidatedTicket(doc, data) {
-  const { orderRef, items, totalAmount, discountAmount, couponCode, guestName, guestPhone, orderDate } = data;
-  const PW = doc.page.width;   // Page width
-  const PH = doc.page.height;  // Page height
-  const M = 40;                // Margins
+  const { orderRef, items, totalAmount, guestName, guestPhone, orderDate } = data;
+
+  const PW = doc.page.width;
+  const PH = doc.page.height;
+  const M  = 36; // side margins
 
   // ═══════════════════════════════════════════════════════════════
-  // 1. WHITE HEADER SECTION
+  // 1.  HEADER  –  White bar with logo left, booking-id right
   // ═══════════════════════════════════════════════════════════════
-  const headerH = 100;
+  const headerH = 88;
+
   doc.rect(0, 0, PW, headerH).fill(C.white);
 
-  // Logo (snowman mascot) – centered and larger
+  // Logo – left aligned, vertically centred
   if (exists(LOGO_PATH)) {
-    const logoWidth = 120;
-    doc.image(LOGO_PATH, (PW - logoWidth) / 2, 15, { width: logoWidth });
+    const logoH = 52;
+    doc.image(LOGO_PATH, M, (headerH - logoH) / 2, { height: logoH });
   }
 
-  // Booking ID & Order Date (top-right)
-  const rightX = PW - M;
-  const darkBlue = '#044DCE';
-
+  // Booking ID block – right
+  const rightX  = PW - M;
+  const labelY  = 22;
   doc.font('Helvetica').fontSize(7).fillColor(C.veryLight)
-    .text('BOOKING ID', rightX - 160, 25, { width: 160, align: 'right' });
+    .text('BOOKING ID', rightX - 175, labelY, { width: 175, align: 'right' });
+  doc.font('Helvetica-Bold').fontSize(20).fillColor(C.navy)
+    .text(orderRef || '', rightX - 175, labelY + 11, { width: 175, align: 'right' });
+  doc.font('Helvetica').fontSize(7.5).fillColor(C.lightText)
+    .text(`Order Date: ${fmtDateShort(orderDate)}`, rightX - 175, labelY + 34, { width: 175, align: 'right' });
 
-  doc.font('Helvetica-Bold').fontSize(16).fillColor(darkBlue)
-    .text(orderRef || '', rightX - 160, 38, { width: 160, align: 'right' });
-
-  doc.font('Helvetica').fontSize(8).fillColor(C.lightText)
-    .text(`Order Date: ${fmtDateShort(orderDate)}`, rightX - 160, 62, { width: 160, align: 'right' });
+  // Thin bottom border on header
+  doc.moveTo(0, headerH).lineTo(PW, headerH).strokeColor('#D0D8E8').lineWidth(1).stroke();
 
   // ═══════════════════════════════════════════════════════════════
-  // 2. BLUE BANNER SECTION
+  // 2.  BANNER  –  Full-width ticket-bg.jpg + overlay + headline
   // ═══════════════════════════════════════════════════════════════
   const bannerY = headerH;
-  const bannerH = 120;
+  const bannerH = 130;
 
-  // Draw gradient banner - exactly as per screenshot (vibrant blue to pale blue)
-  const gradSteps = 40;
-  for (let i = 0; i < gradSteps; i++) {
-    const ratio = i / gradSteps;
-    const r1 = 0, g1 = 153, b1 = 255;    // Vibrant blue
-    const r2 = 227, g2 = 242, b2 = 253;  // Pale blue
-    const r = Math.round(r1 + (r2 - r1) * ratio);
-    const g = Math.round(g1 + (g2 - g1) * ratio);
-    const b = Math.round(b1 + (b2 - b1) * ratio);
-    const stripH = bannerH / gradSteps;
-    doc.rect(0, bannerY + i * stripH, PW, stripH + 1).fill(`rgb(${r}, ${g}, ${b})`);
+  // Fallback solid gradient if no image
+  if (exists(BG_PATH)) {
+    doc.image(BG_PATH, 0, bannerY, { width: PW, height: bannerH });
+    // Dark blue tint overlay for legibility
+    doc.save();
+    doc.rect(0, bannerY, PW, bannerH).fill(C.bannerBlue);
+    doc.opacity(0.55);
+    doc.rect(0, bannerY, PW, bannerH).fill(C.navy);
+    doc.restore();
+  } else {
+    // Gradient fallback
+    const steps = 40;
+    for (let i = 0; i < steps; i++) {
+      const t  = i / steps;
+      const r  = Math.round(0   + (0   - 0)   * t);
+      const g  = Math.round(87  + (57  - 87)  * t);
+      const b  = Math.round(184 + (184 - 184) * t);
+      doc.rect(0, bannerY + (i * bannerH / steps), PW, bannerH / steps + 1)
+         .fill(`rgb(${r},${g},${b})`);
+    }
   }
 
-  // Restore background image (snowflakes)
-  if (exists(BG_PATH)) {
+  // Subtle watermark text
+  doc.save();
+  doc.font('Helvetica-Bold').fontSize(72).fillColor(C.white).opacity(0.05)
+    .text('SNOW CITY', 0, bannerY + 20, { width: PW, align: 'center' });
+  doc.restore();
+
+  // Headline: "Your Booking " + [is] + " Confirmed!"
+  // Center the whole line
+  const headY    = bannerY + 28;
+  const mainSize = 30;
+
+  doc.save();
+  // Measure parts for centering
+  doc.font('Helvetica-Bold').fontSize(mainSize);
+  const part1W = doc.widthOfString('Your Booking ');
+  const partIsW = doc.widthOfString('is ');
+  const part3W = doc.widthOfString('Confirmed!');
+  const totalW = part1W + partIsW + part3W;
+  const startX = (PW - totalW) / 2;
+
+  doc.fillColor(C.white).text('Your Booking ', startX, headY, { lineBreak: false, continued: false });
+  doc.fillColor(C.accent).text('is ', startX + part1W, headY, { lineBreak: false, continued: false });
+  doc.fillColor(C.white).text('Confirmed!', startX + part1W + partIsW, headY, { lineBreak: false });
+  doc.restore();
+
+  // Sub-line: date | attraction | time  (pulled from first item)
+  if (items.length > 0) {
+    const first    = items[0];
+    const subDate  = dayjs(first.booking_date).format('dddd, D MMMM YYYY');
+    const subSlot  = getSlotDisplay(first);
+    const subTitle = first.item_title || '';
+    const subLine  = `${subDate}  |  ${subTitle}  |  ${subSlot}`;
+
+    doc.font('Helvetica').fontSize(9).fillColor('rgba(255,255,255,0.85)')
+      .text(subLine, 0, headY + 40, { width: PW, align: 'center' });
+  }
+
+  // Temperature badge (Snow Park specific)
+  const hasSnow = items.some(i => (i.item_title || '').toLowerCase().includes('snow'));
+  if (hasSnow) {
+    const badgeW = 72, badgeH = 48, badgeX = PW - M - badgeW, badgeY2 = bannerY + 14;
     doc.save();
-    doc.opacity(0.6); // Subtle overlay
-    doc.image(BG_PATH, 0, bannerY, { width: PW, height: bannerH });
+    doc.roundedRect(badgeX, badgeY2, badgeW, badgeH, 8).fill('rgba(255,255,255,0.15)');
+    doc.roundedRect(badgeX, badgeY2, badgeW, badgeH, 8).strokeColor('rgba(255,255,255,0.3)').lineWidth(1).stroke();
+    doc.font('Helvetica-Bold').fontSize(20).fillColor(C.white)
+      .text('-7°C', badgeX, badgeY2 + 6, { width: badgeW, align: 'center' });
+    doc.font('Helvetica').fontSize(6.5).fillColor('rgba(255,255,255,0.75)')
+      .text('INDOOR SNOW', badgeX, badgeY2 + 28, { width: badgeW, align: 'center' });
+    doc.text('Real Snowfall', badgeX, badgeY2 + 37, { width: badgeW, align: 'center' });
     doc.restore();
   }
 
-  // Large watermark text "SNOW CITY" in faint white
+  // Scalloped bottom edge (white circles)
   doc.save();
-  doc.font('Helvetica-Bold').fontSize(64).fillColor(C.white).opacity(0.12)
-    .text('SNOW CITY', 0, bannerY + 15, { width: PW, align: 'center' });
-  doc.restore();
-
-  // "Your Booking is Confirmed!" text in the banner
-  doc.save();
-  doc.font('Helvetica-Bold').fontSize(32).fillColor(C.white)
-    .text('Your Booking is Confirmed!', 0, bannerY + 45, { width: PW, align: 'center' });
-  doc.restore();
-
-  // Wavy snow bottom simulation
-  doc.save();
-  doc.rect(0, bannerY + bannerH - 8, PW, 15).fill(C.pageBg);
-  for (let x = -10; x < PW + 20; x += 30) {
-    doc.circle(x, bannerY + bannerH - 5, 18).fill(C.pageBg);
+  const scallop = 16;
+  for (let x = scallop / 2; x < PW; x += scallop) {
+    doc.circle(x, bannerY + bannerH, scallop / 2 + 1).fill(C.white);
   }
   doc.restore();
 
   // ═══════════════════════════════════════════════════════════════
-  // 3. GUEST INFORMATION SECTION (Side-by-side)
+  // 3.  SUMMARY LABEL + GUEST INFO  (white section)
   // ═══════════════════════════════════════════════════════════════
-  let y = bannerY + bannerH + 15;
+  let y = bannerY + bannerH + 18;
 
-  doc.font('Helvetica-Bold').fontSize(12).fillColor(darkBlue)
+  doc.font('Helvetica').fontSize(9).fillColor(C.lightText)
     .text('Below is a summary of your booking', M, y);
-  y += 25;
+  y += 18;
 
-  // Header Labels
-  doc.font('Helvetica').fontSize(8).fillColor(C.veryLight)
-    .text('GUEST NAME', M, y);
-  doc.text('CONTACT', M + 240, y);
-  y += 12;
+  // Two-col guest row
+  doc.font('Helvetica').fontSize(7).fillColor(C.veryLight).text('GUEST NAME', M, y);
+  if (guestPhone) doc.text('CONTACT', PW / 2, y);
+  y += 11;
 
-  // Values
-  doc.font('Helvetica-Bold').fontSize(11).fillColor(C.text)
-    .text(guestName, M, y);
+  doc.font('Helvetica-Bold').fontSize(13).fillColor(C.navy).text(guestName, M, y);
   if (guestPhone) {
-    doc.text(guestPhone, M + 240, y);
+    doc.font('Helvetica-Bold').fontSize(13).fillColor(C.navy).text(guestPhone, PW / 2, y);
   }
   y += 20;
 
-  // Separator
-  doc.moveTo(M, y).lineTo(PW - M, y).strokeColor(C.cardBorder).lineWidth(0.5).stroke();
-  y += 15;
+  // Divider
+  doc.moveTo(M, y).lineTo(PW - M, y).strokeColor(C.cardBorder).lineWidth(0.75).stroke();
+  y += 20;
 
   // ═══════════════════════════════════════════════════════════════
-  // 4. ATTRACTION / BOOKING CARDS
+  // 4.  ATTRACTION / BOOKING CARDS
   // ═══════════════════════════════════════════════════════════════
-  items.forEach((item) => {
-    const title = item.item_title || 'Booking';
-    const hasAddons = item.addons && item.addons.length > 0;
-    const isSnowPark = (title || '').toLowerCase().includes('snow park');
+  items.forEach((item, idx) => {
+    const title      = item.item_title || 'Booking';
+    const color      = getAttractionColor(title);
+    const slotStr    = getSlotDisplay(item);
+    const dateStr    = dayjs(item.booking_date).format('dddd, D MMMM YYYY');
+    const qty        = Number(item.quantity || 1);
+    const hasAddons  = item.addons && item.addons.length > 0;
+    const isSnowPark = (title || '').toLowerCase().includes('snow');
 
-    let cardH = 85;
-    if (hasAddons) cardH += 15 + (item.addons.length * 12);
+    // Estimate card height
+    let cardH = 108;
+    if (hasAddons) cardH += 14 + item.addons.length * 14;
+    if (isSnowPark) cardH += 24; // extra row for tips pills
 
-    if (y + cardH > PH - 140) {
-      doc.addPage();
-      y = M;
-    }
+    if (y + cardH > PH - 150) { doc.addPage(); y = M; }
 
-    const color = getAttractionColor(title);
-    const slotStr = getSlotDisplay(item);
-    const dateStr = dayjs(item.booking_date).format('dddd, D MMMM YYYY');
-    const qty = Number(item.quantity || 1);
+    const cardX = M;
+    const cardW = PW - M * 2;
 
-    // Colored top border (horizontal line)
-    doc.moveTo(M, y).lineTo(PW - M, y).strokeColor(color).lineWidth(4).stroke();
-
-    // Card background/border
+    // Card shadow (subtle)
     doc.save();
-    doc.rect(M, y + 2, PW - (M * 2), cardH - 2).fill(C.white);
-    doc.rect(M, y + 2, PW - (M * 2), cardH - 2).strokeColor(C.cardBorder).lineWidth(0.5).stroke();
+    doc.rect(cardX + 2, y + 2, cardW, cardH).fill('#E8ECF4');
     doc.restore();
 
-    // Content
-    doc.font('Helvetica-Bold').fontSize(11).fillColor(darkBlue)
-      .text(title, M + 14, y + 12);
+    // Card background
+    doc.roundedRect(cardX, y, cardW, cardH, 8).fill(C.cardBg);
+    doc.roundedRect(cardX, y, cardW, cardH, 8)
+       .strokeColor(C.cardBorder).lineWidth(0.75).stroke();
 
-    const infoY = y + 32;
-    // Labels
-    doc.font('Helvetica').fontSize(8).fillColor(C.veryLight)
-      .text('VISIT DATE', M + 14, infoY);
-    doc.text('TIME SLOT', M + 240, infoY);
-    doc.text('QTY', PW - M - 60, infoY);
+    // Left accent bar
+    doc.roundedRect(cardX, y, 5, cardH, 3).fill(color);
 
-    // Data
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(C.text)
-      .text(dateStr, M + 14, infoY + 12);
-    doc.text(slotStr, M + 240, infoY + 12);
-    doc.fontSize(14).fillColor(C.text)
-      .text(String(qty), PW - M - 60, infoY + 10);
+    // ── Card header row ──────────────────────────────────────────
+    const cx = cardX + 16;
+    const cw = cardW - 20;
 
-    let nextY = infoY + 28;
+    doc.font('Helvetica-Bold').fontSize(12).fillColor(color)
+      .text(title, cx, y + 12, { continued: false });
 
-    // Add-ons Section
-    if (hasAddons) {
-      doc.font('Helvetica-Bold').fontSize(7.5).fillColor(C.veryLight)
-        .text('ADD-ONS', M + 14, nextY);
-      nextY += 12;
-
-      item.addons.forEach((addon) => {
-        doc.font('Helvetica').fontSize(8.5).fillColor(C.text)
-          .text(addon.title || 'Add-on', M + 14, nextY);
-
-        const priceStr = `${addon.quantity} x ${money(addon.price)}`;
-        doc.font('Helvetica-Bold').fontSize(8.5).fillColor(C.text)
-          .text(priceStr, PW - M - 140, nextY, { width: 120, align: 'right' });
-
-        nextY += 12;
-      });
-      nextY += 5;
+    // "Most Popular" badge for Snow Park
+    if (isSnowPark) {
+      drawPill(doc, cx + doc.widthOfString(title) + 10, y + 11,
+               'Most Popular Experience', C.tagBg, C.tagText, 7);
     }
 
-    y += cardH + 15;
+    // ── Three info columns ───────────────────────────────────────
+    const infoY  = y + 34;
+    const col1   = cx;
+    const col2   = cx + 190;
+    const col3   = cardX + cardW - 55;
+
+    // Labels
+    doc.font('Helvetica').fontSize(7).fillColor(C.veryLight);
+    doc.text('VISIT DATE',  col1, infoY);
+    doc.text('TIME SLOT',   col2, infoY);
+    doc.text('QTY',         col3, infoY);
+
+    // Values
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(C.text);
+    doc.text(dateStr, col1, infoY + 11);
+    doc.text(slotStr, col2, infoY + 11);
+    doc.font('Helvetica-Bold').fontSize(18).fillColor(C.navy)
+      .text(String(qty), col3, infoY + 8);
+
+    let nextY = infoY + 32;
+
+    // ── Add-ons ──────────────────────────────────────────────────
+    if (hasAddons) {
+      doc.font('Helvetica-Bold').fontSize(7).fillColor(C.veryLight)
+        .text('ADD-ONS', cx, nextY);
+      nextY += 11;
+      item.addons.forEach((addon) => {
+        doc.font('Helvetica').fontSize(8.5).fillColor(C.text)
+          .text(addon.title || 'Add-on', cx, nextY);
+        const priceStr = `${addon.quantity} × ${money(addon.price)}`;
+        doc.font('Helvetica-Bold').fontSize(8.5)
+          .text(priceStr, cardX + cardW - 140, nextY, { width: 120, align: 'right' });
+        nextY += 13;
+      });
+      nextY += 4;
+    }
+
+    // ── Snow Park tips pills ─────────────────────────────────────
+    if (isSnowPark) {
+      const pillY = nextY + 4;
+      let px = cx;
+      const pills = [
+        { text: 'Arrive 15 mins early', bg: '#E8F5E9', fg: '#1B5E20' },
+        { text: 'Jacket, Boots & Gloves FREE', bg: '#E3F2FD', fg: '#0D47A1' },
+        { text: '45 mins snow access', bg: '#E8EAF6', fg: '#1A237E' },
+      ];
+      pills.forEach(p => {
+        px += drawPill(doc, px, pillY, p.text, p.bg, p.fg, 7.5);
+      });
+      nextY = pillY + 18;
+    }
+
+    y += cardH + 16;
   });
 
   // ═══════════════════════════════════════════════════════════════
-  // 5. TOTAL AMOUNT SECTION
+  // 5.  TOTAL AMOUNT PAID
   // ═══════════════════════════════════════════════════════════════
-  doc.moveTo(M, y).lineTo(PW - M, y).strokeColor(C.cardBorder).lineWidth(0.5).stroke();
-  y += 15;
+  if (y > PH - 160) { doc.addPage(); y = M; }
 
-  if (y > PH - 100) { doc.addPage(); y = M; }
+  // Subtle divider
+  doc.moveTo(M, y).lineTo(PW - M, y).strokeColor(C.cardBorder).lineWidth(0.75).stroke();
+  y += 16;
 
-  doc.font('Helvetica').fontSize(8).fillColor(C.veryLight)
+  doc.font('Helvetica').fontSize(7.5).fillColor(C.veryLight)
     .text('TOTAL AMOUNT PAID', M, y);
 
   const totalY = y + 12;
-  doc.font('Helvetica-Bold').fontSize(22).fillColor('#D8973C')
+  doc.font('Helvetica-Bold').fontSize(26).fillColor('#C47F00')
     .text(money(totalAmount), M, totalY);
 
-  doc.font('Helvetica').fontSize(8).fillColor(C.lightText)
-    .text('This is your official payment confirmation.', PW - M - 200, totalY, { width: 200, align: 'right' });
-  doc.text('No separate invoice will be issued.', PW - M - 200, totalY + 10, { width: 200, align: 'right' });
+  // Payment status badge
+  const statusBadgeX = PW - M - 110;
+  doc.roundedRect(statusBadgeX, totalY + 2, 110, 22, 4).fill('#E8F5E9');
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(C.paidGreen)
+    .text('PAID IN FULL  ✓', statusBadgeX, totalY + 8, { width: 110, align: 'center' });
 
-  y += 50;
+  doc.font('Helvetica').fontSize(7.5).fillColor(C.lightText)
+    .text('Official payment confirmation.', PW - M - 200, totalY + 28, { width: 200, align: 'right' });
+  doc.text('No separate invoice will be issued.', PW - M - 200, totalY + 38, { width: 200, align: 'right' });
+
+  y += 65;
 
   // ═══════════════════════════════════════════════════════════════
-  // 6. TERMS & CONDITIONS
+  // 6.  KNOW BEFORE YOU GO
   // ═══════════════════════════════════════════════════════════════
-  if (y > PH - 180) { doc.addPage(); y = M; }
+  if (y > PH - 200) { doc.addPage(); y = M; }
 
-  doc.font('Helvetica-Bold').fontSize(10).fillColor(darkBlue)
-    .text('Terms and Conditions', M, y);
-  y += 18;
+  // Section box
+  const kbygH = 130;
+  doc.roundedRect(M, y, PW - M * 2, kbygH, 8).fill(C.infoBg);
+  doc.roundedRect(M, y, PW - M * 2, kbygH, 8)
+     .strokeColor('#BDD8F5').lineWidth(0.75).stroke();
 
-  const terms = [
-    'Tickets are valid only for the respective booked dates and time slots shown above.',
-    'For Snow Park: arrive 15 minutes before your slot for jacket, boots & gloves fitting.',
-    'Snow Park access is 45 minutes. Late arrivals will have reduced time inside.',
-    'This e-ticket must be presented (digital or printed) at the entrance gate.',
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(C.navy)
+    .text('Know Before You Go', M + 14, y + 12);
+
+  const tips = [
+    'Jacket, boots & gloves are provided FREE — no need to bring your own.',
+    'Arrive 15 minutes before your slot for gear fitting. Late arrivals get reduced time.',
+    'Keep this ticket (digital or printed) for ready scanning at the entrance gate.',
+    'No outside food or beverages inside the snow chamber. Snowman Cafe is on-site.',
     'Tickets are non-cancellable, non-refundable and non-transferable.',
-    'No outside food or beverages permitted inside the snow chamber.',
-    'Snowman Cafe is available on-site for refreshments.',
-    'Management reserves the right to refuse entry on safety or operational grounds.',
-    'Park timings are subject to change. Please check snowcityblr.com before your visit.'
+    'Park timings subject to change. Check snowcityblr.com before your visit.',
   ];
 
-  terms.forEach((term) => {
-    doc.circle(M + 5, y + 3, 1).fill(C.lightText);
-    doc.font('Helvetica').fontSize(7.5).fillColor(C.lightText)
-      .text(term, M + 15, y, { width: PW - M * 2 - 15 });
-    y += 12;
+  const half      = Math.ceil(tips.length / 2);
+  const leftTips  = tips.slice(0, half);
+  const rightTips = tips.slice(half);
+  const tipW      = (PW - M * 2 - 40) / 2;
+  let tipY = y + 28;
+
+  leftTips.forEach((tip, i) => {
+    doc.circle(M + 19, tipY + 4, 2).fill(C.bannerBlue);
+    doc.font('Helvetica').fontSize(7.5).fillColor(C.text)
+      .text(tip, M + 26, tipY, { width: tipW - 20 });
+    tipY += doc.heightOfString(tip, { width: tipW - 20 }) + 6;
+  });
+  tipY = y + 28;
+  rightTips.forEach((tip, i) => {
+    const rx = M + 14 + tipW + 14;
+    doc.circle(rx + 5, tipY + 4, 2).fill(C.bannerBlue);
+    doc.font('Helvetica').fontSize(7.5).fillColor(C.text)
+      .text(tip, rx + 12, tipY, { width: tipW - 20 });
+    tipY += doc.heightOfString(tip, { width: tipW - 20 }) + 6;
   });
 
+  y += kbygH + 20;
+
   // ═══════════════════════════════════════════════════════════════
-  // 7. FOOTER SECTION
+  // 7.  FOOTER
   // ═══════════════════════════════════════════════════════════════
-  const footerH = 60;
+  const footerH = 68;
   const footerY = PH - footerH;
-  doc.rect(0, footerY, PW, footerH).fill(darkBlue);
+  doc.rect(0, footerY, PW, footerH).fill(C.navy);
 
-  const colW = (PW - M * 2) / 3;
-  const footerTextY = footerY + 12;
+  // Logo in footer (small, white-ish)
+  if (exists(LOGO_PATH)) {
+    doc.save();
+    doc.opacity(0.85);
+    doc.image(LOGO_PATH, M, footerY + 10, { height: 36 });
+    doc.restore();
+  }
 
-  doc.font('Helvetica-Bold').fontSize(7).fillColor(C.white);
-  doc.text('VISIT US', M, footerTextY);
-  doc.text('WEBSITE', M + colW, footerTextY);
-  doc.text('CONTACT US', M + colW * 2, footerTextY);
+  const footerCols = [
+    { label: 'VISIT US',    lines: ['Fun World Complex, Jayamahal Main Rd,', 'J.C.Nagar, Bengaluru – 560 006'] },
+    { label: 'WEBSITE',     lines: ['www.snowcityblr.com'] },
+    { label: 'CONTACT',     lines: ['+91 78295 50000', 'info@snowcityblr.com'] },
+    { label: 'TIMINGS',     lines: ['10:00 AM – 8:00 PM', 'All days, year-round'] },
+  ];
 
-  doc.font('Helvetica').fontSize(6.5).opacity(0.8);
-  doc.text('Fun World Complex, Jayamahal Main Rd,', M, footerTextY + 11);
-  doc.text('J.C.Nagar, Bengaluru – 560 006', M, footerTextY + 20);
+  const colW    = (PW - M * 2 - 20) / footerCols.length;
+  const fStartX = M + 80; // offset past logo
 
-  doc.text('www.snowcityblr.com', M + colW, footerTextY + 11);
-  doc.font('Helvetica-Bold').text('PARK TIMINGS', M + colW, footerTextY + 20);
-  doc.font('Helvetica').text('10:00 AM – 8:00 PM (All days)', M + colW, footerTextY + 29);
+  footerCols.forEach((col, i) => {
+    const fx = fStartX + i * colW;
+    const fy = footerY + 10;
+    doc.font('Helvetica-Bold').fontSize(6.5).fillColor(C.accent)
+      .text(col.label, fx, fy);
+    col.lines.forEach((line, li) => {
+      doc.font('Helvetica').fontSize(7).fillColor('rgba(255,255,255,0.8)')
+        .text(line, fx, fy + 10 + li * 10);
+    });
+  });
 
-  doc.text('+91 78295 50000', M + colW * 2, footerTextY + 11);
-  doc.text('info@snowcityblr.com', M + colW * 2, footerTextY + 20);
-
-  doc.opacity(0.4).fontSize(6).text('Official E-Ticket | Bengaluru Leisure Private Limited | Do not duplicate or alter', 0, footerY + footerH - 10, { width: PW, align: 'center' });
+  // Fine print
+  doc.save();
+  doc.opacity(0.45).font('Helvetica').fontSize(5.5).fillColor(C.white)
+    .text(
+      'Official E-Ticket  |  Bengaluru Leisure Private Limited  |  Do not duplicate or alter  |  Valid only for booked date & slot',
+      0, footerY + footerH - 10,
+      { width: PW, align: 'center' }
+    );
+  doc.restore();
 }
 
 // ── Generate PDF Buffer (no disk storage) ──────────────────────────
-
 async function generateTicketBuffer(booking_id) {
   const data = await getFullOrderData(booking_id);
   if (!data) throw new Error('Order/Booking not found');
 
   const doc = new PDFDocument({
-    size: 'A4',
-    margin: 0,
+    size:         'A4',
+    margin:       0,
     autoFirstPage: true,
   });
 
@@ -413,7 +538,7 @@ async function generateTicketBuffer(booking_id) {
   doc.end();
 
   const buffer = await new Promise((resolve, reject) => {
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('end',   () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
   });
 
@@ -421,20 +546,19 @@ async function generateTicketBuffer(booking_id) {
     buffer,
     filename: `ORDER_${data.orderRef}.pdf`,
     orderRef: data.orderRef,
-    orderId: data.orderId,
+    orderId:  data.orderId,
   };
 }
 
 // ── Legacy alias: generateTicket uploads to S3 ─────────────────────
-
 async function generateTicket(booking_id) {
   try {
     const result = await generateTicketBuffer(booking_id);
 
     const s3Result = await s3Service.uploadBuffer({
-      buffer: result.buffer,
-      key: `tickets/${result.filename}`,
-      contentType: 'application/pdf'
+      buffer:      result.buffer,
+      key:         `tickets/${result.filename}`,
+      contentType: 'application/pdf',
     });
 
     console.log(`[TicketService] Ticket uploaded to S3: ${s3Result.location}`);

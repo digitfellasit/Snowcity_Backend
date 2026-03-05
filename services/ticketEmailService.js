@@ -247,15 +247,16 @@ async function sendOrderEmail(order_id) {
   });
 
   const attachments = [];
-  const pdfPaths = new Set();
-  for (const item of order.items || []) {
-    if (!item.ticket_pdf && !item.booking_id) continue;
-
-    // Instead of reading the file path, simply fetch by booking ID
-    const ticketData = await getTicketBufferForBooking(item.booking_id);
-    if (ticketData && ticketData.buffer && !pdfPaths.has(item.booking_id)) {
-      pdfPaths.add(item.booking_id);
-      attachments.push({ filename: ticketData.filename || `ticket_${item.booking_ref}.pdf`, content: ticketData.buffer, contentType: 'application/pdf' });
+  // Generate ONE consolidated PDF from the first booking item (all items share the same order)
+  const firstItem = (order.items || []).find(i => i.booking_id);
+  if (firstItem) {
+    const ticketData = await getTicketBufferForBooking(firstItem.booking_id);
+    if (ticketData && ticketData.buffer) {
+      attachments.push({
+        filename: ticketData.filename || `ticket_${order.order_ref || order.order_id}.pdf`,
+        content: ticketData.buffer,
+        contentType: 'application/pdf'
+      });
     }
   }
 

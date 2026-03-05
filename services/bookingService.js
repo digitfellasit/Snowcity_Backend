@@ -18,7 +18,7 @@ try {
 const { createOrder: rzpCreate, verifyPaymentSignature } = require('../config/razorpay');
 const phonepe = require('../config/phonepe');
 const payphiService = require('./payphiService');
-const phonepeService = require('./phonepeService');
+const phonepeService = require('./phonepe.service');
 const ticketService = require('./ticketService');
 const ticketEmailService = require('./ticketEmailService');
 const interaktService = require('./interaktService');
@@ -690,8 +690,8 @@ async function createBookings(payload) {
         `INSERT INTO bookings 
                (order_id, user_id, item_type, attraction_id, combo_id, slot_id, combo_slot_id,
                 offer_id, quantity, booking_date, total_amount, discount_amount, payment_status,
-                slot_start_time, slot_end_time, slot_label)
-               VALUES ($1, $2, $3::booking_item_type, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'Pending', $13, $14, $15)
+                slot_start_time, slot_end_time, slot_label, booking_status)
+               VALUES ($1, $2, $3::booking_item_type, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'Pending', $13, $14, $15, 'PENDING_PAYMENT')
                RETURNING *`,
         [
           orderId, userId, itemType, attractionId, comboId, slotId, comboSlotId,
@@ -832,7 +832,7 @@ async function checkPayPhiStatus(orderId) {
 
       // Update Bookings
       await client.query(
-        `UPDATE bookings SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PayPhi', updated_at = NOW() WHERE order_id = $2`,
+        `UPDATE bookings SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PayPhi', booking_status = 'CONFIRMED', updated_at = NOW() WHERE order_id = $2`,
         [txnId, order.order_id]
       );
     });
@@ -986,7 +986,7 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
 
       // Update Bookings
       await client.query(
-        `UPDATE bookings SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PhonePe', updated_at = NOW() WHERE order_id = $2`,
+        `UPDATE bookings SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PhonePe', booking_status = 'CONFIRMED', updated_at = NOW() WHERE order_id = $2`,
         [txnId, order.order_id]
       );
     });

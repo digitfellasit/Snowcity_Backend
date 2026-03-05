@@ -36,6 +36,7 @@ function mapBooking(row) {
     booking_status: row.booking_status,
 
     // Artifacts
+    ticket_status: row.ticket_status || 'NOT_REDEEMED',
     ticket_pdf: row.ticket_pdf,
     whatsapp_sent: row.whatsapp_sent,
     email_sent: row.email_sent,
@@ -590,6 +591,7 @@ async function updateBooking(booking_id, updates = {}) {
     'payment_mode',
     'payment_ref',
     'booking_status',
+    'ticket_status',
     'ticket_pdf',
     'whatsapp_sent',
     'email_sent'

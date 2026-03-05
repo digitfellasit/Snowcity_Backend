@@ -9,7 +9,7 @@ const offersModel = require('../models/offers.model');
 const bookingsModel = require('../models/bookings.model');
 const bookingService = require('./bookingService');
 const payphiService = require('./payphiService');
-const phonepeService = require('./phonepeService');
+const phonepeService = require('./phonepe.service');
 const payphi = require('../config/payphi');
 
 const round2 = (x) => Number((Math.round((Number(x) || 0) * 100) / 100).toFixed(2));

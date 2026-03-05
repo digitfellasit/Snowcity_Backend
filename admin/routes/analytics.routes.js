@@ -10,6 +10,11 @@ router.get('/', analyticsCtrl.getAnalytics);
 
 router.get('/overview', analyticsCtrl.getOverview);
 
+router.get('/ops-dashboard', analyticsCtrl.getOpsDashboard);
+
+router.get('/reports/transactions', analyticsCtrl.getTransactionReport);
+router.get('/reports/guests', analyticsCtrl.getGuestReport);
+
 router.get('/trend', analyticsCtrl.getTrend);
 
 router.get('/top-attractions', analyticsCtrl.getTopAttractions);
@@ -18,17 +23,17 @@ router.get('/attractions-breakdown', async (req, res, next) => {
   try {
     const { from = null, to = null } = req.query;
     const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
-    
+
     // Apply attraction scope for subadmins
     const scopes = req.user?.scopes || {};
     const attractionScope = scopes.attraction || [];
     let attractionIds = null;
-    
+
     // If subadmin, restrict to their allowed attractions
     if (!attractionScope.includes('*') && attractionScope.length > 0) {
       attractionIds = attractionScope;
     }
-    
+
     const data = await adminModel.getAttractionBreakdown({ from, to, limit, attraction_ids: attractionIds });
     res.json(data);
   } catch (err) { next(err); }
@@ -38,12 +43,12 @@ router.get('/attractions-breakdown', async (req, res, next) => {
 router.get('/attraction-revenue', async (req, res, next) => {
   try {
     const { from = null, to = null, attraction_id = null } = req.query;
-    
+
     // Apply attraction scope for subadmins
     const scopes = req.user?.scopes || {};
     const attractionScope = scopes.attraction || [];
     let finalAttractionId = attraction_id;
-    
+
     // If subadmin, restrict to their allowed attractions
     if (!attractionScope.includes('*') && attractionScope.length > 0) {
       // If a specific attraction is requested, verify it's in their scope
@@ -56,7 +61,7 @@ router.get('/attraction-revenue', async (req, res, next) => {
         finalAttractionId = attractionScope[0];
       }
     }
-    
+
     const data = await adminModel.getAttractionRevenueStats({ from, to, attraction_id: finalAttractionId });
     res.json(data);
   } catch (err) { next(err); }
@@ -66,14 +71,14 @@ router.get('/attraction-revenue', async (req, res, next) => {
 router.get('/combo-revenue', async (req, res, next) => {
   try {
     const { from = null, to = null, attraction_id = null, combo_id = null } = req.query;
-    
+
     // Apply scopes for subadmins
     const scopes = req.user?.scopes || {};
     const attractionScope = scopes.attraction || [];
     const comboScope = scopes.combo || [];
     let finalAttractionId = attraction_id;
     let finalComboId = combo_id;
-    
+
     // If subadmin, restrict to their allowed attractions/combos
     if (!attractionScope.includes('*') && attractionScope.length > 0) {
       // If a specific attraction is requested, verify it's in their scope
@@ -86,7 +91,7 @@ router.get('/combo-revenue', async (req, res, next) => {
         finalAttractionId = attractionScope[0];
       }
     }
-    
+
     // Check combo access
     if (!comboScope.includes('*') && comboScope.length > 0) {
       if (combo_id) {
@@ -95,7 +100,7 @@ router.get('/combo-revenue', async (req, res, next) => {
         }
       }
     }
-    
+
     const data = await adminModel.getComboOfferStats({ from, to, attraction_id: finalAttractionId, combo_id: finalComboId });
     res.json(data);
   } catch (err) { next(err); }
@@ -105,16 +110,16 @@ router.get('/combo-revenue', async (req, res, next) => {
 router.get('/daily', async (req, res, next) => {
   try {
     const { from = null, to = null, attraction_id = null, combo_id = null } = req.query;
-    
+
     // Apply role-based scoping
     const scopes = req.user?.scopes || {};
-    
-    const data = await adminModel.getDetailedDailyAnalytics({ 
-      from, 
-      to, 
-      attraction_id, 
-      combo_id, 
-      user_scopes: scopes 
+
+    const data = await adminModel.getDetailedDailyAnalytics({
+      from,
+      to,
+      attraction_id,
+      combo_id,
+      user_scopes: scopes
     });
     res.json(data);
   } catch (err) { next(err); }
@@ -124,17 +129,17 @@ router.get('/daily', async (req, res, next) => {
 router.get('/split', async (req, res, next) => {
   try {
     const { from = null, to = null, group_by = 'payment_status' } = req.query;
-    
+
     // Apply attraction scope for subadmins
     const scopes = req.user?.scopes || {};
     const attractionScope = scopes.attraction || [];
     let attractionId = null;
-    
+
     // If subadmin with limited attractions, use first one
     if (!attractionScope.includes('*') && attractionScope.length > 0) {
       attractionId = attractionScope[0];
     }
-    
+
     const data = await adminModel.getSplitData({ from, to, group_by, attraction_id: attractionId });
     res.json({ group_by, data });
   } catch (err) { next(err); }
@@ -232,28 +237,28 @@ function resolveHeaders(type) {
 router.get('/report.csv', async (req, res, next) => {
   try {
     const { type = 'bookings', from = null, to = null, attraction_id = null, combo_id = null, group_by = 'payment_status' } = req.query;
-    
+
     // Apply scopes for subadmins
     const scopes = req.user?.scopes || {};
     const attractionScope = scopes.attraction || [];
     const comboScope = scopes.combo || [];
     let finalAttractionId = attraction_id ? Number(attraction_id) : null;
     let finalComboId = combo_id ? Number(combo_id) : null;
-    
+
     // Validate attraction access
     if (!attractionScope.includes('*') && attractionScope.length > 0) {
       if (finalAttractionId && !attractionScope.includes(finalAttractionId)) {
         return res.status(403).json({ error: 'Access denied: Attraction not in your scope' });
       }
     }
-    
+
     // Validate combo access
     if (!comboScope.includes('*') && comboScope.length > 0) {
       if (finalComboId && !comboScope.includes(finalComboId)) {
         return res.status(403).json({ error: 'Access denied: Combo not in your scope' });
       }
     }
-    
+
     const rows = await getReportRows({ type, from, to, attraction_id: finalAttractionId, combo_id: finalComboId, group_by });
     const headers = resolveHeaders(type);
     const csv = toCsv(rows, headers);
@@ -266,28 +271,28 @@ router.get('/report.csv', async (req, res, next) => {
 router.get('/report.xlsx', async (req, res, next) => {
   try {
     const { type = 'bookings', from = null, to = null, attraction_id = null, combo_id = null, group_by = 'payment_status' } = req.query;
-    
+
     // Apply scopes for subadmins
     const scopes = req.user?.scopes || {};
     const attractionScope = scopes.attraction || [];
     const comboScope = scopes.combo || [];
     let finalAttractionId = attraction_id ? Number(attraction_id) : null;
     let finalComboId = combo_id ? Number(combo_id) : null;
-    
+
     // Validate attraction access
     if (!attractionScope.includes('*') && attractionScope.length > 0) {
       if (finalAttractionId && !attractionScope.includes(finalAttractionId)) {
         return res.status(403).json({ error: 'Access denied: Attraction not in your scope' });
       }
     }
-    
+
     // Validate combo access
     if (!comboScope.includes('*') && comboScope.length > 0) {
       if (finalComboId && !comboScope.includes(finalComboId)) {
         return res.status(403).json({ error: 'Access denied: Combo not in your scope' });
       }
     }
-    
+
     const rows = await getReportRows({ type, from, to, attraction_id: finalAttractionId, combo_id: finalComboId, group_by });
     const headers = resolveHeaders(type);
 
@@ -310,28 +315,28 @@ router.get('/report.xlsx', async (req, res, next) => {
 router.get('/report.pdf', async (req, res, next) => {
   try {
     const { type = 'bookings', from = null, to = null, attraction_id = null, combo_id = null, group_by = 'payment_status' } = req.query;
-    
+
     // Apply scopes for subadmins
     const scopes = req.user?.scopes || {};
     const attractionScope = scopes.attraction || [];
     const comboScope = scopes.combo || [];
     let finalAttractionId = attraction_id ? Number(attraction_id) : null;
     let finalComboId = combo_id ? Number(combo_id) : null;
-    
+
     // Validate attraction access
     if (!attractionScope.includes('*') && attractionScope.length > 0) {
       if (finalAttractionId && !attractionScope.includes(finalAttractionId)) {
         return res.status(403).json({ error: 'Access denied: Attraction not in your scope' });
       }
     }
-    
+
     // Validate combo access
     if (!comboScope.includes('*') && comboScope.length > 0) {
       if (finalComboId && !comboScope.includes(finalComboId)) {
         return res.status(403).json({ error: 'Access denied: Combo not in your scope' });
       }
     }
-    
+
     const rows = await getReportRows({ type, from, to, attraction_id: finalAttractionId, combo_id: finalComboId, group_by });
     const headers = resolveHeaders(type);
 

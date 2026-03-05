@@ -39,10 +39,10 @@ class PhonePeController {
       // Create payment request payload
       const paymentData = {
         merchantOrderId: orderId,
-        amount: Math.round(parseFloat(amount) * 100), // Convert to paise
+        amount: parseFloat(amount), // Pass Rupees; service/config converts to paise
         udf1: email,
         udf2: mobile,
-        redirectUrl: process.env.PHONEPE_CALLBACK_URL,
+        redirectUrl: process.env.PHONEPE_CALLBACK_URL || '',
         message: `Payment for Order ${orderId}`,
         paymentModeConfig: {
           // Configure available payment modes if needed
