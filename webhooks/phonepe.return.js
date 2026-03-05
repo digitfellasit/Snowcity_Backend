@@ -25,14 +25,12 @@ const pickValue = (payload = {}, target = '') => {
 };
 
 const resolveClientBaseUrl = () => {
-    const raw = process.env.CLIENT_URL || '';
+    const raw = process.env.FRONTEND_URL || process.env.CLIENT_URL || '';
     const entries = raw
         .split(',')
         .map((val) => String(val || '').trim())
         .filter(Boolean);
-    const fallback = process.env.NODE_ENV === 'production'
-        ? 'https://app.snowcityblr.com'
-        : 'https://app.snowcityblr.com';
+    const fallback = 'https://www.snowcityblr.com';
     const base = entries[0] || fallback;
     return base.replace(/\/$/, '');
 };

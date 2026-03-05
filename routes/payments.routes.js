@@ -21,7 +21,7 @@ async function shallowPing(baseURL) {
 router.get('/health', async (req, res) => {
   try {
     let dbOk = false;
-    try { await pool.query('SELECT 1'); dbOk = true; } catch {}
+    try { await pool.query('SELECT 1'); dbOk = true; } catch { }
 
     const payphiConfigured = !!(process.env.PAYPHI_MERCHANT_ID && process.env.PAYPHI_SECRET_KEY);
     const phonepeConfigured = !!(process.env.PHONEPE_CLIENT_ID && process.env.PHONEPE_CLIENT_SECRET);
@@ -99,5 +99,95 @@ router.post('/payphi/hash-preview', express.json(), (req, res) => {
 
 // Include PhonePe routes
 router.use('/phonepe', require('./phonepe.routes'));
+
+// ✅ Public: PayPhi status check by tranCtx/txnId — NO AUTH required
+// Called by frontend PaymentStatus page after PayPhi redirects back to snowcityblr.com
+router.get('/payphi/status/txn/:txnId', async (req, res) => {
+  try {
+    const { txnId } = req.params;
+    if (!txnId || !txnId.trim()) {
+      return res.status(400).json({ success: false, error: 'txnId is required' });
+    }
+
+    const { pool: db } = require('../config/db');
+    const bookingService = require('../services/bookingService');
+
+    // Find order by PayPhi tranCtx (stored as payment_ref) or order_ref
+    const q = await db.query(
+      `SELECT order_id, order_ref, payment_status
+       FROM orders
+       WHERE payment_ref = $1 OR order_ref = $1
+       LIMIT 1`,
+      [txnId.trim()]
+    );
+    const order = q.rows[0] || null;
+
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'Order not found for this transaction ID' });
+    }
+
+    // Already paid — return success immediately
+    if (order.payment_status === 'Completed') {
+      const bookingRes = await db.query(
+        `SELECT booking_id, ticket_pdf FROM bookings
+         WHERE order_id = $1 AND ticket_pdf IS NOT NULL
+         ORDER BY booking_id ASC LIMIT 1`,
+        [order.order_id]
+      );
+      const firstBooking = bookingRes.rows[0];
+      return res.json({
+        success: true,
+        alreadyPaid: true,
+        status: 'COMPLETED',
+        orderId: order.order_id,
+        orderRef: order.order_ref,
+        bookingId: firstBooking?.booking_id || null,
+        ticketUrl: firstBooking?.ticket_pdf || null,
+      });
+    }
+
+    // Check with PayPhi API
+    let statusResult;
+    try {
+      statusResult = await bookingService.checkPayPhiStatus(order.order_id);
+    } catch (svcErr) {
+      return res.status(502).json({
+        success: false,
+        error: 'Payment verification failed. Please contact support.',
+      });
+    }
+
+    const paid = statusResult.success;
+    if (!paid) {
+      return res.json({
+        success: false,
+        status: statusResult.status || 'PENDING',
+        orderId: order.order_id,
+        orderRef: order.order_ref,
+        message: 'Payment not yet completed',
+      });
+    }
+
+    const bookingRes = await db.query(
+      `SELECT booking_id, ticket_pdf FROM bookings
+       WHERE order_id = $1
+       ORDER BY booking_id ASC LIMIT 1`,
+      [order.order_id]
+    );
+    const firstBooking = bookingRes.rows[0];
+
+    return res.json({
+      success: true,
+      status: 'COMPLETED',
+      orderId: order.order_id,
+      orderRef: order.order_ref,
+      bookingId: firstBooking?.booking_id || null,
+      ticketUrl: firstBooking?.ticket_pdf || null,
+    });
+
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Internal server error during payment verification' });
+  }
+});
 
 module.exports = router;

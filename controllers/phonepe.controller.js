@@ -1,5 +1,7 @@
 const phonepeService = require('../services/phonepe.service');
 const bookingsModel = require('../models/bookings.model');
+const bookingService = require('../services/bookingService');
+const { pool } = require('../config/db');
 
 class PhonePeController {
   /**
@@ -208,6 +210,109 @@ class PhonePeController {
       res.redirect(`${process.env.PHONEPE_FAILURE_URL}?error=processing_error`);
     }
   }
+
+  /**
+   * ✅ Public: Verify PhonePe payment by merchantTransactionId (txnId)
+   * Called by frontend PaymentStatus page after PhonePe redirects to snowcityblr.com.
+   * No auth required — identifies order by the merchantTransactionId stored at payment initiation.
+   */
+  async verifyPaymentByTxnId(req, res) {
+    try {
+      const { txnId } = req.params;
+
+      if (!txnId || typeof txnId !== 'string' || !txnId.trim()) {
+        return res.status(400).json({ success: false, error: 'txnId is required' });
+      }
+
+      const merchantTxnId = txnId.trim();
+      console.log('🔍 PhonePe verifyPaymentByTxnId:', merchantTxnId);
+
+      // 1. Find order by payment transaction reference
+      const q = await pool.query(
+        `SELECT order_id, order_ref, payment_status, user_id
+         FROM orders
+         WHERE payment_ref = $1 OR order_ref = $1
+         LIMIT 1`,
+        [merchantTxnId]
+      );
+      const order = q.rows[0] || null;
+
+      if (!order) {
+        console.warn('❌ PhonePe verifyPaymentByTxnId: Order not found for txnId:', merchantTxnId);
+        return res.status(404).json({ success: false, error: 'Order not found for this transaction ID' });
+      }
+
+      console.log('✅ Found order:', order.order_id, 'status:', order.payment_status);
+
+      // 2. If already paid, return success immediately (avoids duplicate PhonePe API calls)
+      if (order.payment_status === 'Completed') {
+        const bookingRes = await pool.query(
+          `SELECT booking_id, ticket_pdf FROM bookings
+           WHERE order_id = $1 AND ticket_pdf IS NOT NULL
+           ORDER BY booking_id ASC LIMIT 1`,
+          [order.order_id]
+        );
+        const firstBooking = bookingRes.rows[0];
+        return res.json({
+          success: true,
+          alreadyPaid: true,
+          status: 'COMPLETED',
+          orderId: order.order_id,
+          orderRef: order.order_ref,
+          bookingId: firstBooking?.booking_id || null,
+          ticketUrl: firstBooking?.ticket_pdf || null,
+        });
+      }
+
+      // 3. Check with PhonePe API + mark booking paid + generate ticket
+      let statusResult;
+      try {
+        statusResult = await bookingService.checkPhonePeStatus(order.order_id);
+      } catch (svcErr) {
+        console.error('❌ PhonePe verifyPaymentByTxnId: service error:', svcErr.message);
+        return res.status(502).json({
+          success: false,
+          error: 'Payment verification failed. Please contact support.',
+          details: svcErr.message,
+        });
+      }
+
+      const paid = statusResult.success || statusResult.status === 'completed' || statusResult.status === 'COMPLETED';
+
+      if (!paid) {
+        return res.json({
+          success: false,
+          status: statusResult.status || 'PENDING',
+          orderId: order.order_id,
+          orderRef: order.order_ref,
+          message: 'Payment not yet completed',
+        });
+      }
+
+      // 4. Fetch ticket URL for confirmed booking
+      const bookingRes = await pool.query(
+        `SELECT booking_id, ticket_pdf FROM bookings
+         WHERE order_id = $1
+         ORDER BY booking_id ASC LIMIT 1`,
+        [order.order_id]
+      );
+      const firstBooking = bookingRes.rows[0];
+
+      return res.json({
+        success: true,
+        status: 'COMPLETED',
+        orderId: order.order_id,
+        orderRef: order.order_ref,
+        bookingId: firstBooking?.booking_id || null,
+        ticketUrl: firstBooking?.ticket_pdf || null,
+      });
+
+    } catch (error) {
+      console.error('❌ PhonePe verifyPaymentByTxnId error:', error);
+      res.status(500).json({ success: false, error: 'Internal server error during payment verification' });
+    }
+  }
 }
 
 module.exports = new PhonePeController();
+

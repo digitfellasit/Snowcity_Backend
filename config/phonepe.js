@@ -35,20 +35,23 @@ function normalizeBaseUrl(raw, fallback) {
   return (parts[0] || fallback || 'https://app.snowcityblr.com').replace(/\/+$/, '');
 }
 const APP_URL = normalizeBaseUrl(process.env.APP_URL, 'https://app.snowcityblr.com');
-const CLIENT_URL = (process.env.CLIENT_URL || 'https://app.snowcityblr.com').replace(/\/+$/, '');
+const CLIENT_URL = (process.env.CLIENT_URL || 'https://www.snowcityblr.com').replace(/\/+$/, '');
+const FRONTEND_URL = (process.env.FRONTEND_URL || process.env.CLIENT_URL || 'https://www.snowcityblr.com').replace(/\/+$/, '');
 
 // Callback / redirect URLs
+// CALLBACK_URL = backend webhook for server-to-server notification (no whitelisting needed)
 let callbackUrlCandidate = (process.env.PHONEPE_CALLBACK_URL || '').trim();
 if (!callbackUrlCandidate) {
-  callbackUrlCandidate = `${APP_URL}/api/webhooks/phonepe/return`;
+  callbackUrlCandidate = `${APP_URL}/webhooks/phonepe/notify`;
 } else {
   callbackUrlCandidate = callbackUrlCandidate.replace(/\$\{\s*APP_URL\s*\}/gi, APP_URL);
   if (/^\//.test(callbackUrlCandidate)) callbackUrlCandidate = `${APP_URL}${callbackUrlCandidate}`;
 }
 const CALLBACK_URL = callbackUrlCandidate;
-const REDIRECT_URL = process.env.PHONEPE_SUCCESS_URL
-  ? process.env.PHONEPE_SUCCESS_URL.replace(/\$\{\s*CLIENT_URL\s*\}/gi, CLIENT_URL)
-  : `${CLIENT_URL}/payment/success`;
+
+// REDIRECT_URL — Option B: PhonePe redirects user directly to the whitelisted frontend domain
+// The txnId is appended per-payment in initiatePayment()
+const FRONTEND_PAYMENT_STATUS_BASE = `${FRONTEND_URL}/payment-status`;
 
 // HTTP client (no default auth — we'll add Bearer per-request)
 const http = createHttpClient({ baseURL: BASE_URL, timeout: 20000 });
@@ -57,8 +60,9 @@ logger.info(`PhonePe configured for ${ENV} environment`, {
   baseUrl: BASE_URL,
   hasOAuth: !!(CLIENT_ID && CLIENT_SECRET),
   hasLegacy: !!(SALT_KEY && MERCHANT_ID),
-  redirectUrl: REDIRECT_URL
+  paymentStatusBase: FRONTEND_PAYMENT_STATUS_BASE
 });
+
 
 // ──────────── OAuth2 Token Management ────────────
 let cachedToken = null;
@@ -163,6 +167,10 @@ async function initiatePayment({
   // ── Get OAuth2 token ──
   const accessToken = await getAccessToken();
 
+  // ── Build redirect URL — Option B: points directly to whitelisted frontend domain
+  // PhonePe will append orderId as a query param on some versions, but we bake it in for safety
+  const redirectUrl = `${FRONTEND_PAYMENT_STATUS_BASE}?gateway=phonepe&txnId=${merchantTransactionId}`;
+
   // ── Build Standard Checkout v2 payload ──
   const payload = {
     merchantOrderId: merchantTransactionId,
@@ -176,7 +184,7 @@ async function initiatePayment({
       type: 'PG_CHECKOUT',
       message: 'Payment for SnowCity booking',
       merchantUrls: {
-        redirectUrl: REDIRECT_URL,
+        redirectUrl: redirectUrl,
         callbackUrl: callbackUrl
       }
     }

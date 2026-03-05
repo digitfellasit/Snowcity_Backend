@@ -1,14 +1,15 @@
 const DEFAULT_ORIGINS = [
-  'https://app.snowcityblr.com',
-  'https://app.snowcityblr.com',
-  'https://snowcityblr.com/',
+  // Production
   'https://snowcityblr.com',
-  'https://snowcityblr.com',
+  'https://www.snowcityblr.com',
   'https://app.snowcityblr.com',
-  'https://snowcityblr.com',
   'https://qa.phicommerce.com',
-  'https://app.snowcityblr.com'
+  // Local development
+  'https://www.snowcityblr.com',
+  'https://app.snowcityblr.com',
+  'http://localhost:3000',
 ];
+
 
 const parseOrigins = () => {
   const raw = process.env.CORS_ORIGIN;
