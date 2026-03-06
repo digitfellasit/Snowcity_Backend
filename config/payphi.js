@@ -115,10 +115,12 @@ async function initiateSale({
   // allow extra params if needed (included in hash if non-empty as per spec)
   ...rest
 }) {
-  // Build frontend-direct return URL if not explicitly provided
-  // PayPhi will redirect users to this whitelisted frontend URL after payment
+  // Build return URL if not explicitly provided
+  // IMPORTANT: PayPhi sends users back via POST, so we CANNOT point to an SPA route directly.
+  // Instead, point to the Vercel serverless function at /api/payphi-return which handles
+  // POST → GET redirect to /payment-status
   if (!returnURL) {
-    returnURL = `${FRONTEND_PAYMENT_STATUS_BASE}?gateway=payphi&txnId=${encodeURIComponent(merchantTxnNo)}`;
+    returnURL = FRONTEND_PAYPHI_RETURN;
   }
   const amountStr = typeof amount === 'number' ? amount.toFixed(2) : String(amount);
 
