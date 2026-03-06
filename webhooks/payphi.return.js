@@ -145,55 +145,25 @@ module.exports = async (req, res) => {
       success = false;
     }
 
-    // 3. Redirect to Client
+    // 3. Redirect to frontend PaymentStatus page (same flow as PhonePe)
+    // The frontend page will call GET /api/payments/payphi/status/txn/:txnId
+    // to verify payment + update DB + generate tickets via bookingService.checkPayPhiStatus
     const prefix = resolveClientBaseUrl();
-    const orderRef = order?.order_ref || '';
+    const txnParam = order?.order_ref || merchantTxnNo || tranCtx || '';
+    const redirectUrl = `${prefix}/payment-status?gateway=payphi&txnId=${encodeURIComponent(txnParam)}`;
 
-    // Handle all failure scenarios - if not explicitly successful, treat as failed
-    if (!success) {
-      const failedUrl = `${prefix}/payment/return?order=${encodeURIComponent(orderRef)}&status=failed&reason=payment_failed&gateway=payphi`;
-      logger.warn('PayPhi return: Payment failed or incomplete, redirecting to failed page', {
-        order_id: order?.order_id,
-        payment_status: paymentStatus,
-        success
-      });
-      return res.redirect(failedUrl);
-    }
+    logger.info('PayPhi return: Redirecting to payment-status page', {
+      order_id: order?.order_id,
+      txnParam,
+      paymentSuccess: success,
+      redirectUrl,
+    });
 
-    // Success case - proceed with success redirect
-    let primaryBookingId = null;
-    let ticketPath = null;
-    try {
-      // Find the first booking's ID, and find the first available ticket PDF for the order.
-      // Using COALESCE helps prioritize the ticket from the first booking but falls back to any other if not available.
-      const bookingRef = await pool.query(
-        `SELECT b1.booking_id, COALESCE(b1.ticket_pdf, (SELECT b2.ticket_pdf FROM bookings b2 WHERE b2.order_id = $1 AND b2.ticket_pdf IS NOT NULL ORDER BY b2.booking_id ASC LIMIT 1)) as ticket_pdf
-         FROM bookings b1
-         WHERE b1.order_id = $1
-         ORDER BY b1.booking_id ASC
-         LIMIT 1`,
-        [order.order_id]
-      );
-      const firstBooking = bookingRef.rows[0];
-      primaryBookingId = firstBooking?.booking_id || null;
-      ticketPath = firstBooking?.ticket_pdf || null;
-    } catch (lookupErr) {
-      logger.warn('PayPhi return: Failed to fetch primary booking for success redirect', { err: lookupErr.message });
-    }
-
-    const params = new URLSearchParams();
-    if (primaryBookingId) params.set('booking', primaryBookingId);
-    params.set('cart', orderRef);
-    if (tranCtx) params.set('tx', tranCtx);
-    const absTicketUrl = absoluteFromPath(ticketPath);
-    if (absTicketUrl) params.set('ticket', absTicketUrl);
-
-    const successUrl = `${prefix}/payment/success?${params.toString()}`;
-    return res.redirect(successUrl);
+    return res.redirect(redirectUrl);
 
   } catch (err) {
     logger.error('PayPhi return error', { err: err.message });
-    // Fallback redirect
-    return res.redirect(`${process.env.CLIENT_URL || ''}/payment/return?status=error`);
+    const prefix = resolveClientBaseUrl();
+    return res.redirect(`${prefix}/payment-status?gateway=payphi&status=error`);
   }
 };

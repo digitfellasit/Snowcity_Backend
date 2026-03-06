@@ -810,9 +810,19 @@ async function checkPayPhiStatus(orderId) {
     raw
   });
 
+  // Determine the actual status from PayPhi response
+  // PayPhi responseCode/transactionStatus values:
+  //   Success: R1000, SUCCESS, 000, CAPTURED
+  //   Failed:  R1001, R1002, FAILED, DECLINED, ERROR, CANCELLED
+  //   Pending: anything else (no explicit success or failure)
+  const rawCode = String(raw?.responseCode || raw?.respCode || '').toUpperCase();
+  const rawStatus = String(raw?.transactionStatus || raw?.status || '').toUpperCase();
+  const isExplicitFail = ['FAILED', 'DECLINED', 'ERROR', 'CANCELLED', 'REJECTED'].includes(rawStatus)
+    || ['R1001', 'R1002', 'R1003', 'R1004', 'R1005'].includes(rawCode)
+    || rawStatus === 'FAIL';
+
+  // ── SUCCESS: update DB to Completed + CONFIRMED ──
   if (success && order.payment_status !== 'Completed') {
-    // Try to extract the most meaningful transaction ID
-    // Some gateways return 'transactionId', 'txnId', 'transactionValue', etc.
     const txnId = raw?.transactionId || raw?.txnId || raw?.transactionValue ||
       raw?.data?.transactionId || raw?.response?.transactionId ||
       order.payment_ref || merchantTxnNo;
@@ -824,13 +834,13 @@ async function checkPayPhiStatus(orderId) {
     });
 
     await withTransaction(async (client) => {
-      // Update Order
+      // Update Order — payment_status='Completed' is valid enum value
       await client.query(
         `UPDATE orders SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PayPhi', updated_at = NOW() WHERE order_id = $2`,
         [txnId, order.order_id]
       );
 
-      // Update Bookings
+      // Update Bookings — payment_status='Completed', booking_status='CONFIRMED' are valid enum values
       await client.query(
         `UPDATE bookings SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PayPhi', booking_status = 'CONFIRMED', updated_at = NOW() WHERE order_id = $2`,
         [txnId, order.order_id]
@@ -848,9 +858,6 @@ async function checkPayPhiStatus(orderId) {
       console.error('Failed to generate/store ticket in S3 after PayPhi payment', err);
     }
 
-    // Ticket PDFs are generated on-the-fly when needed (download, email, WhatsApp)
-    // No disk storage — generate buffer and send directly
-
     // Send single combined email for the entire order
     try {
       await ticketEmailService.sendOrderEmail(order.order_id);
@@ -865,9 +872,37 @@ async function checkPayPhiStatus(orderId) {
       console.error('Failed to send WhatsApp ticket for order', err);
     }
 
+    return { success: true, status: 'COMPLETED', response: raw };
   }
 
-  return { success, response: raw };
+  // ── Already completed — no-op ──
+  if (order.payment_status === 'Completed') {
+    return { success: true, status: 'COMPLETED', response: raw };
+  }
+
+  // ── EXPLICIT FAILURE: update DB to Failed ──
+  if (isExplicitFail && order.payment_status !== 'Failed') {
+    console.log('🔍 DEBUG PayPhi Payment FAILED:', { orderId, rawCode, rawStatus });
+
+    await withTransaction(async (client) => {
+      // Update Order — payment_status='Failed' is valid enum value
+      await client.query(
+        `UPDATE orders SET payment_status = 'Failed', payment_mode = 'PayPhi', updated_at = NOW() WHERE order_id = $1`,
+        [order.order_id]
+      );
+
+      // Update Bookings — payment_status='Failed', booking_status stays 'PENDING_PAYMENT'
+      await client.query(
+        `UPDATE bookings SET payment_status = 'Failed', payment_mode = 'PayPhi', updated_at = NOW() WHERE order_id = $1`,
+        [order.order_id]
+      );
+    });
+
+    return { success: false, status: 'FAILED', response: raw };
+  }
+
+  // ── PENDING: no DB change, let frontend retry ──
+  return { success: false, status: 'PENDING', response: raw };
 }
 
 // -------- PhonePe Payment --------
@@ -974,17 +1009,23 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
     merchantTxnNo
   });
 
+  // PhonePe state values: COMPLETED, FAILED, PENDING, CANCELLED
+  const rawState = String(raw?.state || '').toUpperCase();
+  const isExplicitFail = ['FAILED', 'DECLINED', 'ERROR', 'CANCELLED'].includes(rawState)
+    || rawState === 'FAIL';
+
+  // ── SUCCESS: update DB to Completed + CONFIRMED ──
   if (success && order.payment_status !== 'Completed') {
     const txnId = raw?.transactionId || merchantTxnNo;
 
     await withTransaction(async (client) => {
-      // Update Order
+      // Update Order — payment_status='Completed' is valid enum value
       await client.query(
         `UPDATE orders SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PhonePe', updated_at = NOW() WHERE order_id = $2`,
         [txnId, order.order_id]
       );
 
-      // Update Bookings
+      // Update Bookings — payment_status='Completed', booking_status='CONFIRMED' are valid enum values
       await client.query(
         `UPDATE bookings SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PhonePe', booking_status = 'CONFIRMED', updated_at = NOW() WHERE order_id = $2`,
         [txnId, order.order_id]
@@ -1002,9 +1043,6 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
       console.error('Failed to generate/store ticket in S3 after PhonePe payment', err);
     }
 
-    // Ticket PDFs are generated on-the-fly when needed (download, email, WhatsApp)
-    // No disk storage
-
     // Send single combined email for the entire order
     try {
       await ticketEmailService.sendOrderEmail(order.order_id);
@@ -1018,9 +1056,38 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
     } catch (err) {
       console.error('Failed to send WhatsApp ticket for order', err);
     }
+
+    return { success: true, status: 'COMPLETED', response: raw };
   }
 
-  return { success, response: raw };
+  // ── Already completed — no-op ──
+  if (order.payment_status === 'Completed') {
+    return { success: true, status: 'COMPLETED', response: raw };
+  }
+
+  // ── EXPLICIT FAILURE: update DB to Failed ──
+  if (isExplicitFail && order.payment_status !== 'Failed') {
+    console.log('🔍 DEBUG PhonePe Payment FAILED:', { orderId: order.order_id, rawState });
+
+    await withTransaction(async (client) => {
+      // Update Order — payment_status='Failed' is valid enum value
+      await client.query(
+        `UPDATE orders SET payment_status = 'Failed', payment_mode = 'PhonePe', updated_at = NOW() WHERE order_id = $1`,
+        [order.order_id]
+      );
+
+      // Update Bookings — payment_status='Failed', booking_status stays 'PENDING_PAYMENT'
+      await client.query(
+        `UPDATE bookings SET payment_status = 'Failed', payment_mode = 'PhonePe', updated_at = NOW() WHERE order_id = $1`,
+        [order.order_id]
+      );
+    });
+
+    return { success: false, status: 'FAILED', response: raw };
+  }
+
+  // ── PENDING: no DB change, let frontend retry ──
+  return { success: false, status: 'PENDING', response: raw };
 }
 
 // -------- Cancellation --------

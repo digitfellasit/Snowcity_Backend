@@ -277,15 +277,18 @@ class PhonePeController {
         });
       }
 
-      const paid = statusResult.success || statusResult.status === 'completed' || statusResult.status === 'COMPLETED';
+      const paid = statusResult.success || statusResult.status === 'COMPLETED';
 
       if (!paid) {
+        const status = statusResult.status || 'PENDING';
         return res.json({
           success: false,
-          status: statusResult.status || 'PENDING',
+          status,
           orderId: order.order_id,
           orderRef: order.order_ref,
-          message: 'Payment not yet completed',
+          message: status === 'FAILED'
+            ? 'Payment failed or was declined. Please try again.'
+            : 'Payment not yet completed',
         });
       }
 

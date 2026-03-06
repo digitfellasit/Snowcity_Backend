@@ -22,8 +22,13 @@ const FRONTEND_URL = normalizeBaseUrl(
   'https://snowcity.vercel.app'
 );
 
-// Industry-standard: PayPhi redirects users directly to the whitelisted frontend URL.
-// Backend processing is handled asynchronously via S2S notify webhook.
+// Industry-standard: PayPhi redirects users to a thin handler on the whitelisted frontend domain.
+// PayPhi returns via POST, so we need a serverless function to handle it and redirect to SPA.
+// The Vercel serverless function at /api/payphi-return converts POST → GET /payment-status
+const FRONTEND_PAYPHI_RETURN = `${FRONTEND_URL}/api/payphi-return`;
+
+// PayPhi payment-status base URL — must match PhonePe's approach
+// Frontend PaymentStatus page verifies payment via backend API call
 const FRONTEND_PAYMENT_STATUS_BASE = `${FRONTEND_URL}/payment-status`;
 
 const httpV2 = createHttpClient({ baseURL: `${BASE}/api/v2`, timeout: 20000 });
@@ -196,6 +201,7 @@ function isSuccessStatus(resp) {
 
 module.exports = {
   BASE,
+  FRONTEND_PAYMENT_STATUS_BASE,
   formatTxnDate,
 
   // Canonical/hmac helpers
