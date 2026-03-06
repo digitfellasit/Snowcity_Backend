@@ -112,13 +112,19 @@ router.get('/payphi/status/txn/:txnId', async (req, res) => {
     const { pool: db } = require('../config/db');
     const bookingService = require('../services/bookingService');
 
-    // Find order by PayPhi tranCtx (stored as payment_ref) or order_ref
+    // Find order by PayPhi txnId — could be stored as payment_txn_no, payment_ref, or order_ref
+    // merchantTxnNo format is "ORDER_REF_TIMESTAMP" (e.g. SCTNJ89L_1772786185992)
+    const trimmed = txnId.trim();
+    // Extract the order_ref prefix (before the _timestamp suffix) for fallback matching
+    const orderRefPrefix = trimmed.includes('_') ? trimmed.split('_').slice(0, -1).join('_') : trimmed;
+
     const q = await db.query(
       `SELECT order_id, order_ref, payment_status
        FROM orders
-       WHERE payment_ref = $1 OR order_ref = $1
+       WHERE payment_txn_no = $1 OR payment_ref = $1 OR order_ref = $1 OR order_ref = $2
+       ORDER BY created_at DESC
        LIMIT 1`,
-      [txnId.trim()]
+      [trimmed, orderRefPrefix]
     );
     const order = q.rows[0] || null;
 
