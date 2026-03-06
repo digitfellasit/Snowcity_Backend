@@ -26,8 +26,8 @@ const BASE_URLS = {
 const BASE_URL = BASE_URLS[ENV];
 
 // API path prefix differs by environment
-const API_PREFIX = ENV === 'sandbox' ? '/apis/pg-sandbox' : '/apis/hermes';
-
+const API_PREFIX = ENV === 'sandbox' ? '/apis/pg-sandbox' : '/apis/identity-manager';
+const API_PREFIX_2 = ENV === 'sandbox' ? '/apis/pg-sandbox' : '/apis/pg';
 // Normalize APP_URL
 function normalizeBaseUrl(raw, fallback) {
   const input = typeof raw === 'string' ? raw : '';
@@ -190,7 +190,7 @@ async function initiatePayment({
     }
   };
 
-  const payEndpoint = `${API_PREFIX}/checkout/v2/pay`;
+  const payEndpoint = `${API_PREFIX_2}/checkout/v2/pay`;
 
   logger.info('PhonePe initiate payment (OAuth2)', {
     merchantOrderId: merchantTransactionId,
@@ -270,7 +270,7 @@ async function initiatePayment({
 // ──────────── Check Payment Status ────────────
 async function checkStatus(merchantTransactionId) {
   const accessToken = await getAccessToken();
-  const endpoint = `${API_PREFIX}/checkout/v2/order/${merchantTransactionId}/status`;
+  const endpoint = `${API_PREFIX_2}/checkout/v2/order/${merchantTransactionId}/status`;
 
   logger.info('PhonePe checking status (v2)', { merchantTransactionId, endpoint });
 
@@ -335,7 +335,7 @@ async function initiateRefund({
     amount: amountInPaise
   });
 
-  const response = await http.post(`${API_PREFIX}/checkout/v2/refund`, payload, {
+  const response = await http.post(`${API_PREFIX_2}/checkout/v2/refund`, payload, {
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `O-Bearer ${accessToken}`

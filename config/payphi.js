@@ -17,17 +17,14 @@ function normalizeBaseUrl(raw, fallback) {
 }
 
 const APP_URL = normalizeBaseUrl(process.env.APP_URL, 'https://app.snowcityblr.com');
+const FRONTEND_URL = normalizeBaseUrl(
+  process.env.FRONTEND_URL || process.env.CLIENT_URL,
+  'https://snowcity.vercel.app'
+);
 
-let returnUrlCandidate = (process.env.PAYPHI_RETURN_URL || '').trim();
-if (!returnUrlCandidate) {
-  returnUrlCandidate = `${APP_URL}/api/webhooks/payphi/return`;
-} else {
-  returnUrlCandidate = returnUrlCandidate.replace(/\$\{\s*APP_URL\s*\}/gi, APP_URL);
-  if (/^\//.test(returnUrlCandidate)) {
-    returnUrlCandidate = `${APP_URL}${returnUrlCandidate}`;
-  }
-}
-const RETURN_URL = returnUrlCandidate;
+// Industry-standard: PayPhi redirects users directly to the whitelisted frontend URL.
+// Backend processing is handled asynchronously via S2S notify webhook.
+const FRONTEND_PAYMENT_STATUS_BASE = `${FRONTEND_URL}/payment-status`;
 
 const httpV2 = createHttpClient({ baseURL: `${BASE}/api/v2`, timeout: 20000 });
 const http = createHttpClient({ baseURL: `${BASE}/api`, timeout: 20000 });
@@ -107,12 +104,17 @@ async function initiateSale({
   payType = '0',
   transactionType = 'SALE',
   txnDate = formatTxnDate(),
-  returnURL = RETURN_URL,
+  returnURL,
   addlParam1 = '',
   addlParam2 = '',
   // allow extra params if needed (included in hash if non-empty as per spec)
   ...rest
 }) {
+  // Build frontend-direct return URL if not explicitly provided
+  // PayPhi will redirect users to this whitelisted frontend URL after payment
+  if (!returnURL) {
+    returnURL = `${FRONTEND_PAYMENT_STATUS_BASE}?gateway=payphi&txnId=${encodeURIComponent(merchantTxnNo)}`;
+  }
   const amountStr = typeof amount === 'number' ? amount.toFixed(2) : String(amount);
 
   const payload = {
