@@ -1,0 +1,81 @@
+{
+  "attractions": [
+    {
+      "attraction_id": "22",
+      "title": "Eyelusion",
+      "base_price": "300.00"
+    },
+    {
+      "attraction_id": "20",
+      "title": "Snow Park",
+      "base_price": "650.00"
+    },
+    {
+      "attraction_id": "21",
+      "title": "Madlabs",
+      "base_price": "500.00"
+    },
+    {
+      "attraction_id": "23",
+      "title": "Devil's Darkhouse",
+      "base_price": "150.00"
+    }
+  ],
+  "bookings": [
+    {
+      "booking_id": "481",
+      "item_type": "Attraction",
+      "total_amount": "1100.00",
+      "quantity": 2,
+      "parent_booking_id": "480",
+      "attraction_id": "20",
+      "combo_id": null,
+      "a_title": "Snow Park",
+      "a_base": "650.00"
+    },
+    {
+      "booking_id": "482",
+      "item_type": "Attraction",
+      "total_amount": "800.00",
+      "quantity": 2,
+      "parent_booking_id": "480",
+      "attraction_id": "21",
+      "combo_id": null,
+      "a_title": "Madlabs",
+      "a_base": "500.00"
+    },
+    {
+      "booking_id": "483",
+      "item_type": "Attraction",
+      "total_amount": "500.00",
+      "quantity": 2,
+      "parent_booking_id": "480",
+      "attraction_id": "22",
+      "combo_id": null,
+      "a_title": "Eyelusion",
+      "a_base": "300.00"
+    },
+    {
+      "booking_id": "485",
+      "item_type": "Attraction",
+      "total_amount": "650.00",
+      "quantity": 1,
+      "parent_booking_id": "484",
+      "attraction_id": "20",
+      "combo_id": null,
+      "a_title": "Snow Park",
+      "a_base": "650.00"
+    },
+    {
+      "booking_id": "486",
+      "item_type": "Attraction",
+      "total_amount": "250.00",
+      "quantity": 1,
+      "parent_booking_id": "484",
+      "attraction_id": "22",
+      "combo_id": null,
+      "a_title": "Eyelusion",
+      "a_base": "300.00"
+    }
+  ]
+}

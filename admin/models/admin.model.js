@@ -819,14 +819,16 @@ async function getTransactionReport({ from, to, type = 'both' }) {
         b.created_at,
         b.booking_date,
         ad.title AS description,
-        'Add-on' AS item_type,
+        'Add-on'::text AS item_type,
         ba.price AS unit_price,
         0 AS discount,
         ba.quantity,
-        (ba.price * ba.quantity) AS nett
+        (ba.price * ba.quantity) AS nett,
+        COALESCE(o.order_ref, b.booking_ref) AS order_ref
       FROM booking_addons ba
       JOIN bookings b ON b.booking_id = ba.booking_id
       JOIN addons ad ON ad.addon_id = ba.addon_id
+      LEFT JOIN orders o ON o.order_id = b.order_id
       WHERE b.booking_status <> 'Cancelled'
         AND b.payment_status = 'Completed'
         AND b.parent_booking_id IS NULL
@@ -841,19 +843,29 @@ async function getTransactionReport({ from, to, type = 'both' }) {
         b.created_at,
         b.booking_date,
         COALESCE(a.title, c.name, 'Booking #' || b.booking_id) AS description,
-        b.item_type,
-        CASE WHEN b.quantity > 0 THEN ROUND(COALESCE(b.total_amount, 0) / b.quantity, 2) ELSE 0 END AS unit_price,
-        COALESCE(b.discount_amount, 0) AS discount,
+        b.item_type::text AS item_type,
+        CASE
+            WHEN b.parent_booking_id IS NOT NULL AND a.base_price IS NOT NULL THEN a.base_price
+            WHEN b.quantity > 0 THEN ROUND((COALESCE(b.total_amount, 0) - COALESCE((SELECT SUM(ba2.price * ba2.quantity) FROM booking_addons ba2 WHERE ba2.booking_id = b.booking_id), 0)) / b.quantity, 2)
+            ELSE 0 
+        END AS unit_price,
+        CASE
+            WHEN b.parent_booking_id IS NOT NULL AND a.base_price IS NOT NULL THEN (a.base_price - (b.total_amount / b.quantity)) * b.quantity
+            ELSE COALESCE(b.discount_amount, 0)
+        END AS discount,
         b.quantity,
-        COALESCE(b.final_amount, b.total_amount, 0)
-          - COALESCE((SELECT SUM(ba2.price * ba2.quantity) FROM booking_addons ba2 WHERE ba2.booking_id = b.booking_id), 0)
-          AS nett
+        CASE
+            WHEN b.parent_booking_id IS NOT NULL THEN COALESCE(b.final_amount, b.total_amount, 0)
+            ELSE COALESCE(b.final_amount, b.total_amount, 0) - COALESCE((SELECT SUM(ba2.price * ba2.quantity) FROM booking_addons ba2 WHERE ba2.booking_id = b.booking_id), 0)
+        END AS nett,
+        COALESCE(o.order_ref, b.booking_ref) AS order_ref
       FROM bookings b
       LEFT JOIN attractions a ON a.attraction_id = b.attraction_id
       LEFT JOIN combos c ON c.combo_id = b.combo_id
+      LEFT JOIN orders o ON o.order_id = b.order_id
       WHERE b.booking_status <> 'Cancelled'
         AND b.payment_status = 'Completed'
-        AND b.parent_booking_id IS NULL
+        AND (b.parent_booking_id IS NULL AND b.item_type = 'Attraction' OR b.parent_booking_id IS NOT NULL)
         AND b.booking_date ${dateCond}
       ORDER BY b.created_at DESC
     `;
@@ -866,19 +878,29 @@ async function getTransactionReport({ from, to, type = 'both' }) {
           b.created_at,
           b.booking_date,
           COALESCE(a.title, c.name, 'Booking #' || b.booking_id) AS description,
-          b.item_type,
-          CASE WHEN b.quantity > 0 THEN ROUND(COALESCE(b.total_amount, 0) / b.quantity, 2) ELSE 0 END AS unit_price,
-          COALESCE(b.discount_amount, 0) AS discount,
+          b.item_type::text AS item_type,
+          CASE
+              WHEN b.parent_booking_id IS NOT NULL AND a.base_price IS NOT NULL THEN a.base_price
+              WHEN b.quantity > 0 THEN ROUND((COALESCE(b.total_amount, 0) - COALESCE((SELECT SUM(ba2.price * ba2.quantity) FROM booking_addons ba2 WHERE ba2.booking_id = b.booking_id), 0)) / b.quantity, 2)
+              ELSE 0 
+          END AS unit_price,
+          CASE
+              WHEN b.parent_booking_id IS NOT NULL AND a.base_price IS NOT NULL THEN (a.base_price - (b.total_amount / b.quantity)) * b.quantity
+              ELSE COALESCE(b.discount_amount, 0)
+          END AS discount,
           b.quantity,
-          COALESCE(b.final_amount, b.total_amount, 0)
-            - COALESCE((SELECT SUM(ba2.price * ba2.quantity) FROM booking_addons ba2 WHERE ba2.booking_id = b.booking_id), 0)
-            AS nett
+          CASE
+              WHEN b.parent_booking_id IS NOT NULL THEN COALESCE(b.final_amount, b.total_amount, 0)
+              ELSE COALESCE(b.final_amount, b.total_amount, 0) - COALESCE((SELECT SUM(ba2.price * ba2.quantity) FROM booking_addons ba2 WHERE ba2.booking_id = b.booking_id), 0)
+          END AS nett,
+          COALESCE(o.order_ref, b.booking_ref) AS order_ref
         FROM bookings b
         LEFT JOIN attractions a ON a.attraction_id = b.attraction_id
         LEFT JOIN combos c ON c.combo_id = b.combo_id
+        LEFT JOIN orders o ON o.order_id = b.order_id
         WHERE b.booking_status <> 'Cancelled'
           AND b.payment_status = 'Completed'
-          AND b.parent_booking_id IS NULL
+          AND (b.parent_booking_id IS NULL AND b.item_type = 'Attraction' OR b.parent_booking_id IS NOT NULL)
           AND b.booking_date ${dateCond}
       )
       UNION ALL
@@ -888,14 +910,16 @@ async function getTransactionReport({ from, to, type = 'both' }) {
           b.created_at,
           b.booking_date,
           ad.title AS description,
-          'Add-on' AS item_type,
+          'Add-on'::text AS item_type,
           ba.price AS unit_price,
           0 AS discount,
           ba.quantity,
-          (ba.price * ba.quantity) AS nett
+          (ba.price * ba.quantity) AS nett,
+          COALESCE(o.order_ref, b.booking_ref) AS order_ref
         FROM booking_addons ba
         JOIN bookings b ON b.booking_id = ba.booking_id
         JOIN addons ad ON ad.addon_id = ba.addon_id
+        LEFT JOIN orders o ON o.order_id = b.order_id
         WHERE b.booking_status <> 'Cancelled'
           AND b.payment_status = 'Completed'
           AND b.parent_booking_id IS NULL
@@ -919,7 +943,7 @@ async function getTransactionReport({ from, to, type = 'both' }) {
   return {
     rows: rows.map((r, i) => ({
       sno: i + 1,
-      bookingId: r.booking_id,
+      bookingId: r.order_ref || r.booking_id,
       bookingDate: r.created_at,
       visitDate: r.booking_date,
       description: r.description,

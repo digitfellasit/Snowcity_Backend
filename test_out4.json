@@ -1,0 +1,47 @@
+[
+  {
+    "booking_id": "496",
+    "item_type": "Attraction",
+    "total_amount": "1500.00",
+    "final_amount": "1500.00",
+    "quantity": 2,
+    "parent_booking_id": null,
+    "addons_total": "200.00"
+  },
+  {
+    "booking_id": "480",
+    "item_type": "Combo",
+    "total_amount": "3100.00",
+    "final_amount": "3100.00",
+    "quantity": 2,
+    "parent_booking_id": null,
+    "addons_total": "700.00"
+  },
+  {
+    "booking_id": "501",
+    "item_type": "Attraction",
+    "total_amount": "850.00",
+    "final_amount": "850.00",
+    "quantity": 1,
+    "parent_booking_id": null,
+    "addons_total": "200.00"
+  },
+  {
+    "booking_id": "473",
+    "item_type": "Combo",
+    "total_amount": "1400.00",
+    "final_amount": "1400.00",
+    "quantity": 1,
+    "parent_booking_id": null,
+    "addons_total": "200.00"
+  },
+  {
+    "booking_id": "478",
+    "item_type": "Attraction",
+    "total_amount": "1500.00",
+    "final_amount": "1500.00",
+    "quantity": 2,
+    "parent_booking_id": null,
+    "addons_total": "500.00"
+  }
+]
