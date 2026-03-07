@@ -6,7 +6,7 @@ function createHttpClient({ baseURL, timeout = 10000, headers = {} } = {}) {
   const instance = axios.create({
     baseURL,
     timeout,
-    maxRedirects: 0,
+    maxRedirects: 5,
     headers: {
       'User-Agent': 'SnowCity-Backend/1.0',
       ...headers,

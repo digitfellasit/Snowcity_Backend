@@ -31,8 +31,8 @@ const FRONTEND_PAYPHI_RETURN = `${FRONTEND_URL}/api/payphi-return`;
 // Frontend PaymentStatus page verifies payment via backend API call
 const FRONTEND_PAYMENT_STATUS_BASE = `${FRONTEND_URL}/payment-status`;
 
-const httpV2 = createHttpClient({ baseURL: `${BASE}/api/v2`, timeout: 20000 });
-const http = createHttpClient({ baseURL: `${BASE}/api`, timeout: 20000 });
+const httpV2 = createHttpClient({ baseURL: `${BASE}/api/v2/`, timeout: 20000 });
+const http = createHttpClient({ baseURL: `${BASE}/api/`, timeout: 20000 });
 
 // 15-digit txnDate: YYYYMMDDHHmmssS (first digit of ms)
 function formatTxnDate(date = new Date()) {
@@ -142,7 +142,8 @@ async function initiateSale({
 
   payload.secureHash = computeInitiateHash(payload);
 
-  const resp = await httpV2.post('/initiateSale', payload, {
+  console.log('🔍 PayPhi Initiate URL:', BASE + '/api/v2/initiateSale');
+  const resp = await httpV2.post('initiateSale', payload, {
     headers: { 'Content-Type': 'application/json' },
   });
 
@@ -189,7 +190,7 @@ async function command({
     }
   }
 
-  const resp = await http.post('/command', body.toString(), {
+  const resp = await http.post('command', body.toString(), {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
   return resp.data;
