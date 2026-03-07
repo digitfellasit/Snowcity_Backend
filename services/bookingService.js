@@ -450,15 +450,12 @@ async function computeTotals(item = {}) {
   let offer = null;
   let offerId = null;
 
-  // Prior-date offer logic: offers/happy hours only apply for advance bookings
-  // (booking date must be strictly after today for offer pricing to apply)
+  // Offer logic: applies for advance bookings OR same-day if rule is dynamic_pricing
   const todayStr = new Date().toISOString().slice(0, 10);
-  const isPriorDateBooking = onDate > todayStr; // booking for a future date
 
-  // Try dynamic pricing service first (to support weekend/holiday rules + offers)
-  // Only apply offers for prior-date (advance) bookings
+  // Try dynamic pricing service first
   let appliedDynamic = false;
-  if (isPriorDateBooking && dynamicPricingService && dynamicPricingService.calculateDynamicPrice) {
+  if (dynamicPricingService && dynamicPricingService.calculateDynamicPrice) {
     try {
       // Calculate dynamic price (adjustments + discounts)
       const pricingResult = await dynamicPricingService.calculateDynamicPrice({
@@ -503,8 +500,7 @@ async function computeTotals(item = {}) {
   }
 
   // Fallback to legacy offer pricing if dynamic failed or service missing/not applied
-  // Only for prior-date (advance) bookings
-  if (!appliedDynamic && isPriorDateBooking) {
+  if (!appliedDynamic) {
     const pricing = await applyOfferPricing({
       targetType: item_type === 'Combo' ? 'combo' : 'attraction',
       targetId: item_type === 'Combo' ? item.combo_id : item.attraction_id,

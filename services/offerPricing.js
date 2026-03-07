@@ -16,11 +16,10 @@ async function applyOfferPricing({
   const normalizedTargetId = targetId == null ? null : Number(targetId);
   const normalizedSlotId = slotId == null ? null : Number(slotId);
 
-  // ── Same-day blocking: offers only apply for future dates ──────────
+  // ── Same-day blocking removed because of dynamic_pricing offers ──
   const todayStr = new Date().toISOString().slice(0, 10);
-  if (booking_date && booking_date <= todayStr) {
-    return { unit: base, discount: 0, discount_percent: 0, offer: null };
-  }
+  // Same-day blocking is now handled inside offersModel.findApplicableOfferRule
+  // to allow rule_type = 'dynamic_pricing' to apply on the same day.
   // ───────────────────────────────────────────────────────────────────
 
   // Dynamic import to avoid circular dependency

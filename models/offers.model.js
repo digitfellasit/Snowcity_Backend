@@ -293,11 +293,8 @@ async function findApplicableOfferRule({
   const matchDate = date || new Date().toISOString().slice(0, 10);
   const matchTime = time || null;
 
-  // ── Same-day blocking: offers only apply for future dates ──────────
+  // ── Same-day blocking is handled in the SQL query below ──
   const todayStr = new Date().toISOString().slice(0, 10);
-  if (matchDate <= todayStr) {
-    return null; // No offers for same-day or past bookings
-  }
   // ───────────────────────────────────────────────────────────────────
 
   // ── Dynamic Pricing Override ──────────────────────────────────────
@@ -330,6 +327,7 @@ async function findApplicableOfferRule({
     matchTime,
     matchTime,
     matchDate,
+    todayStr,
   ];
 
   const { rows } = await pool.query(
@@ -337,6 +335,10 @@ async function findApplicableOfferRule({
      FROM offers o
      JOIN offer_rules r ON r.offer_id = o.offer_id
      WHERE o.active = true
+       AND (
+         o.rule_type = 'dynamic_pricing'
+         OR $5::date > $10::date
+       )
        AND (o.valid_from IS NULL OR o.valid_from <= $5::date)
        AND (o.valid_to IS NULL OR o.valid_to >= $6::date)
        AND (

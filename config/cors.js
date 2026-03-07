@@ -1,9 +1,11 @@
 const DEFAULT_ORIGINS = [
   // Production
   'https://snowcity.vercel.app',
-  'https://snowcity.vercel.app',
+  'https://www.snowcity.com',
   'https://snowcityblr.com',
   'https://qa.phicommerce.com',
+  'https://mercury-uat.phonepe.com',
+  'https://secure-ptg.phicommerce.com',
   // Local development
   'https://snowcity.vercel.app',
   'https://app.snowcityblr.com',

@@ -83,6 +83,7 @@ function matchesDayRule(rule, date, holidays = []) {
  */
 async function getApplicableRules({ itemType, itemId, date, time, holidays = [] }) {
   const dateStr = date.toISOString().split('T')[0];
+  const todayStr = new Date().toISOString().slice(0, 10);
   const query = `
     SELECT 
       o.*,
@@ -105,13 +106,17 @@ async function getApplicableRules({ itemType, itemId, date, time, holidays = [] 
       AND (r.specific_date IS NULL OR r.specific_date = $1)
       AND (r.specific_time IS NULL OR $4::time = r.specific_time)
       AND (
+        o.rule_type = 'dynamic_pricing'
+        OR $1 > $5::date
+      )
+      AND (
         o.rule_type IN ('dynamic_pricing', 'date_slot_pricing', 'happy_hour', 'weekday_special')
         OR o.rule_type IS NULL
       )
     ORDER BY r.priority ASC, o.created_at DESC
   `;
 
-  const { rows } = await pool.query(query, [dateStr, itemType, itemId, time]);
+  const { rows } = await pool.query(query, [dateStr, itemType, itemId, time, todayStr]);
 
   // Filter rules based on day type and specific date/time matching
   return rows.filter(rule => {
@@ -220,17 +225,7 @@ async function calculateDynamicPrice({ itemType, itemId, basePrice, date, time, 
   }
 
   // No dynamic pricing rules, apply normal offers logic
-  // But same-day bookings should NOT get offers — only future dates
-  const todayStr = new Date().toISOString().slice(0, 10);
-  if (dateStr <= todayStr) {
-    return {
-      originalPrice: effectiveBasePrice,
-      finalPrice: effectiveBasePrice,
-      discountAmount: 0,
-      appliedRules: [],
-      totalPrice: effectiveBasePrice * quantity
-    };
-  }
+  // Same-day blocking for non-dynamic pricing offers is handled in the SQL query
 
   const rules = await getApplicableRules({ itemType, itemId, date, time, holidays });
 
