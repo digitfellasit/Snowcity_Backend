@@ -474,16 +474,8 @@ async function drawConsolidatedTicket(doc, data) {
   const footerY = PH - footerH;
   doc.rect(0, footerY, PW, footerH).fill(C.navy);
 
-  // Logo in footer (small, white-ish)
-  if (exists(LOGO_PATH)) {
-    doc.save();
-    doc.opacity(0.85);
-    doc.image(LOGO_PATH, M, footerY + 10, { height: 36 });
-    doc.restore();
-  }
-
-  const footerCols = [
-    { label: 'VISIT US',    lines: ['Fun World Complex, Jayamahal Main Rd,', 'J.C.Nagar, Bengaluru – 560 006'] },
+   const footerCols = [
+    { label: 'VISIT US',    lines: ['Fun World Complex,', 'Jayamahal Main Rd,', 'J.C.Nagar, Bengaluru – 560 006'] },
     { label: 'WEBSITE',     lines: ['www.snowcityblr.com'] },
     { label: 'CONTACT',     lines: ['+91 78295 50000', 'info@snowcityblr.com'] },
     { label: 'TIMINGS',     lines: ['10:00 AM – 8:00 PM', 'All days, year-round'] },
