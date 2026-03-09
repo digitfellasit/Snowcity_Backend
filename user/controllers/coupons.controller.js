@@ -36,11 +36,11 @@ exports.getCouponByCode = async (req, res, next) => {
 // POST /api/coupons/apply
 exports.applyCoupon = async (req, res, next) => {
   try {
-    const { code, total_amount, onDate = null } = req.body || {};
-    if (!code || total_amount == null) {
-      return res.status(400).json({ error: 'code and total_amount are required' });
+    const { code, items, onDate = null } = req.body || {};
+    if (!code || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'code and items array are required' });
     }
-    const out = await couponService.applyCoupon({ code, total_amount, onDate });
+    const out = await couponService.applyCoupon({ code, items, onDate });
     res.json(out);
   } catch (err) {
     next(err);

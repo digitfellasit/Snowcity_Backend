@@ -620,13 +620,41 @@ async function createBookings(payload) {
   }
 
   // 2. Apply Global Cart Coupon
-  let couponDiscount = 0;
+  let globalCouponDiscount = 0;
+  let applySpecificCoupon = false;
+  let specificAttractionId = null;
+
   if (globalCouponCode) {
-    const { discount } = await discountFromCoupon(globalCouponCode, Math.max(grossBeforeDiscount - offerDiscountTotal, 0), onDate);
-    couponDiscount = discount;
+    const coupon = await couponsModel.getCouponByCode(globalCouponCode, { activeOnly: true, onDate });
+    if (coupon) {
+      if (coupon.attraction_id) {
+        applySpecificCoupon = true;
+        specificAttractionId = String(coupon.attraction_id);
+
+        let eligibleAmount = 0;
+        for (const pItem of processedItems) {
+          const isMatch = pItem.item_type !== 'Combo' && String(pItem.attraction_id) === specificAttractionId;
+          if (isMatch) {
+            eligibleAmount += pItem.total_amount;
+          }
+        }
+
+        if (eligibleAmount > 0) {
+          const disc = await couponsModel.computeDiscount(coupon, eligibleAmount);
+          globalCouponDiscount = Number(disc?.discount ?? disc?.amount ?? 0);
+        }
+      } else {
+        // Global coupon
+        const { discount } = await discountFromCoupon(globalCouponCode, Math.max(grossBeforeDiscount - offerDiscountTotal, 0), onDate);
+        globalCouponDiscount = discount;
+      }
+    }
   }
 
-  const grandTotalDiscount = offerDiscountTotal + couponDiscount;
+  const grandTotalDiscount = offerDiscountTotal + globalCouponDiscount;
+
+  // Prepare distribution of coupon discount to child items
+  let remainingCouponDiscount = globalCouponDiscount;
 
   // 3. Perform DB Transaction
   return withTransaction(async (client) => {
@@ -682,6 +710,50 @@ async function createBookings(payload) {
         rawComboSlotId
       });
 
+      // Compute distributed coupon discount for this item
+      let currentItemCouponDiscount = 0;
+      if (globalCouponDiscount > 0 && remainingCouponDiscount > 0) {
+        if (applySpecificCoupon) {
+          const isMatch = pItem.item_type !== 'Combo' && String(pItem.attraction_id) === specificAttractionId;
+          if (isMatch) {
+            // Calculate proportion of the eligible items ONLY
+            let totalEligible = 0;
+            for (const pi of processedItems) {
+              if (pi.item_type !== 'Combo' && String(pi.attraction_id) === specificAttractionId) {
+                totalEligible += pi.total_amount;
+              }
+            }
+            if (totalEligible > 0) {
+              const ratio = pItem.total_amount / totalEligible;
+              // Avoid rounding errors on the last item
+              currentItemCouponDiscount = Math.min(
+                remainingCouponDiscount,
+                Math.round((globalCouponDiscount * ratio) * 100) / 100
+              );
+            }
+          }
+        } else {
+          // Global cart coupon, distribute proportionally to all items
+          const ratio = pItem.total_amount / grossBeforeDiscount;
+          currentItemCouponDiscount = Math.min(
+            remainingCouponDiscount,
+            Math.round((globalCouponDiscount * ratio) * 100) / 100
+          );
+        }
+
+        // Final item adjustment
+        if (processedItems.indexOf(pItem) === processedItems.length - 1 && remainingCouponDiscount > 0) {
+          // If last eligible item, dump the rest to handle rounding
+          if (!applySpecificCoupon || (pItem.item_type !== 'Combo' && String(pItem.attraction_id) === specificAttractionId)) {
+            currentItemCouponDiscount = remainingCouponDiscount;
+          }
+        }
+
+        remainingCouponDiscount -= currentItemCouponDiscount;
+      }
+
+      const finalItemDiscount = (pItem.discount_amount || 0) + currentItemCouponDiscount;
+
       const bRes = await client.query(
         `INSERT INTO bookings 
                (order_id, user_id, item_type, attraction_id, combo_id, slot_id, combo_slot_id,
@@ -692,7 +764,7 @@ async function createBookings(payload) {
         [
           orderId, userId, itemType, attractionId, comboId, slotId, comboSlotId,
           pItem.offer_id || null, pItem.quantity, pItem.booking_date,
-          pItem.total_amount, pItem.discount_amount,
+          pItem.total_amount, finalItemDiscount,
           slotStart, slotEnd, slotLabel
         ]
       );

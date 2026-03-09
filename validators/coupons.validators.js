@@ -36,7 +36,12 @@ const getCouponByCodeParam = [param('code').isString().trim().isLength({ min: 1,
 
 const applyCouponBody = [
   body('code').isString().trim().isLength({ min: 1, max: 50 }),
-  body('total_amount').isFloat({ min: 0 }).toFloat(),
+  body('items').isArray({ min: 1 }).withMessage('items must be a non-empty array'),
+  body('items.*.item_type').optional().isString(),
+  body('items.*.attraction_id').optional({ nullable: true }).isInt(),
+  body('items.*.combo_id').optional({ nullable: true }).isInt(),
+  body('items.*.price').isFloat({ min: 0 }).toFloat(),
+  body('items.*.quantity').isInt({ min: 1 }).toInt(),
   body('onDate').optional().isISO8601(),
 ];
 
