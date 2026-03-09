@@ -212,12 +212,6 @@ async function drawConsolidatedTicket(doc, data) {
     }
   }
 
-  // Subtle watermark text
-  doc.save();
-  doc.font('Helvetica-Bold').fontSize(72).fillColor(C.white).opacity(0.05)
-    .text('SNOW CITY', 0, bannerY + 20, { width: PW, align: 'center' });
-  doc.restore();
-
   // Headline: "Your Booking " + [is] + " Confirmed!"
   // Center the whole line
   const headY    = bannerY + 28;

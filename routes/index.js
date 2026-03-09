@@ -36,10 +36,10 @@ router.use('/resolve-slug', cachePublic(300), require('./resolveSlug.routes')); 
 router.use('/webhooks', require('./webhooks.routes'));
 
 // Admin auth routes (public - no authentication required)
-router.use('/admin/auth', require('../admin/routes/adminAuth.routes'));
+router.use('/parkpanel/auth', require('../admin/routes/adminAuth.routes'));
 
 // Admin routes (protected inside admin/router)
-router.use('/admin', require('../admin/routes'));
+router.use('/parkpanel', require('../admin/routes'));
 
 // Base
 router.get('/', (req, res) => res.json({ api: 'SnowCity', version: '1.0.0' }));
