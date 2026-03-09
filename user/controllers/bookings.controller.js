@@ -237,6 +237,8 @@ exports.initiatePayPhiPayment = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const payphiConfig = require('../../config/payphi');
+
 // Check Payment Status for an Order
 exports.checkPayPhiStatus = async (req, res, next) => {
   try {
@@ -249,6 +251,28 @@ exports.checkPayPhiStatus = async (req, res, next) => {
     const out = await bookingService.checkPayPhiStatus(id);
     res.json(out);
   } catch (err) { next(err); }
+};
+
+// Webhook handler for PayPhi Return URL
+exports.handlePayPhiReturn = async (req, res, next) => {
+  try {
+    const body = req.body || {};
+
+    // The PayPhi return sends various fields, including tranCtx which we added to identifying the order 
+    // or we can just redirect generically and let frontend fetch
+
+    // We try to pull a transaction ID
+    const txnId = body.transactionId || body.txnId || body.merchantTxnNo || body.tranCtx || '';
+
+    // Redirect to the frontend explicitly
+    const redirectUrl = `${payphiConfig.FRONTEND_PAYMENT_STATUS_BASE}?gateway=payphi` + (txnId ? `&txnId=${encodeURIComponent(txnId)}` : '');
+
+    // We send a 302 Redirect, turning the POST into a GET on the frontend
+    res.redirect(302, redirectUrl);
+  } catch (err) {
+    console.error('PayPhi Return Error:', err);
+    res.redirect(302, payphiConfig.FRONTEND_PAYMENT_STATUS_BASE + '?gateway=payphi&error=true');
+  }
 };
 
 // Initiate PhonePe Payment for an Order

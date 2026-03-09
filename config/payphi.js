@@ -16,19 +16,16 @@ function normalizeBaseUrl(raw, fallback) {
   return (chosen || fallback || 'https://app.snowcityblr.com').replace(/\/+$/, '');
 }
 
-const APP_URL = normalizeBaseUrl(process.env.APP_URL, 'https://app.snowcityblr.com');
+const APP_URL = normalizeBaseUrl(process.env.APP_URL, 'http://localhost:5000');
 const FRONTEND_URL = normalizeBaseUrl(
   process.env.FRONTEND_URL || process.env.CLIENT_URL,
   'https://snowcity.vercel.app'
 );
 
-// Industry-standard: PayPhi redirects users to a thin handler on the whitelisted frontend domain.
-// PayPhi returns via POST, so we need a serverless function to handle it and redirect to SPA.
-// The Vercel serverless function at /api/payphi-return converts POST → GET /payment-status
-const FRONTEND_PAYPHI_RETURN = `${FRONTEND_URL}/api/payphi-return`;
+// Redirects users back to the backend which will then GET redirect to the frontend.
+const FRONTEND_PAYPHI_RETURN = `${APP_URL}/api/user/bookings/payphi-return`;
 
-// PayPhi payment-status base URL — must match PhonePe's approach
-// Frontend PaymentStatus page verifies payment via backend API call
+// PayPhi payment-status base URL
 const FRONTEND_PAYMENT_STATUS_BASE = `${FRONTEND_URL}/payment-status`;
 
 const httpV2 = createHttpClient({ baseURL: `${BASE}/api/v2/`, timeout: 20000 });
@@ -198,8 +195,20 @@ async function command({
 
 function isSuccessStatus(resp) {
   const code = String(resp?.responseCode || resp?.respCode || '').toUpperCase();
-  const status = String(resp?.transactionStatus || resp?.status || '').toUpperCase();
-  return code === 'R1000' || code === 'SUCCESS' || code === '000' || status === 'SUCCESS' || status === 'CAPTURED';
+  const txnCode = String(resp?.txnResponseCode || '').toUpperCase();
+  const status = String(resp?.transactionStatus || resp?.status || resp?.txnStatus || '').toUpperCase();
+
+  // Explicitly check txn failure states
+  if (['REJ', 'REJECTED', 'FAILED', 'FAIL', 'DECLINED', 'ERROR', 'CANCELLED'].includes(status)) {
+    return false;
+  }
+
+  // If the transaction response explicitly declined
+  if (txnCode && txnCode !== '000' && txnCode !== '0000') {
+    return false;
+  }
+
+  return code === 'R1000' || code === 'SUCCESS' || txnCode === '000' || txnCode === '0000' || status === 'SUCCESS' || status === 'SUC' || status === 'CAPTURED' || code === '000' || code === '0000';
 }
 
 module.exports = {

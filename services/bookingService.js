@@ -883,11 +883,14 @@ async function checkPayPhiStatus(orderId) {
   //   Success: R1000, SUCCESS, 000, CAPTURED
   //   Failed:  R1001, R1002, FAILED, DECLINED, ERROR, CANCELLED
   //   Pending: anything else (no explicit success or failure)
-  const rawCode = String(raw?.responseCode || raw?.respCode || '').toUpperCase();
-  const rawStatus = String(raw?.transactionStatus || raw?.status || '').toUpperCase();
-  const isExplicitFail = ['FAILED', 'DECLINED', 'ERROR', 'CANCELLED', 'REJECTED'].includes(rawStatus)
+  const rawCode = String(raw?.responseCode || raw?.respCode || raw?.txnResponseCode || '').toUpperCase();
+  const rawTxnCode = String(raw?.txnResponseCode || '').toUpperCase();
+  const rawStatus = String(raw?.transactionStatus || raw?.status || raw?.txnStatus || '').toUpperCase();
+
+  const isExplicitFail = ['FAILED', 'DECLINED', 'ERROR', 'CANCELLED', 'REJECTED', 'REJ'].includes(rawStatus)
     || ['R1001', 'R1002', 'R1003', 'R1004', 'R1005'].includes(rawCode)
-    || rawStatus === 'FAIL';
+    || rawStatus === 'FAIL'
+    || (rawTxnCode && rawTxnCode !== '000' && rawTxnCode !== '0000');
 
   // ── SUCCESS: update DB to Completed + CONFIRMED ──
   if (success && order.payment_status !== 'Completed') {

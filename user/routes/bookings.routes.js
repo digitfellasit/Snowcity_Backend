@@ -17,6 +17,7 @@ router.get('/:id', requireAuth, bookingsCtrl.getOrderDetails);
 router.post('/', requireAuth, bookingsCtrl.createOrder);
 
 // PayPhi helpers (Operates on Order ID now)
+router.post('/payphi-return', bookingsCtrl.handlePayPhiReturn);
 router.post('/:id/pay/payphi/initiate', requireAuth, paymentLimiter, bookingsCtrl.initiatePayPhiPayment);
 router.get('/:id/pay/payphi/status', requireAuth, bookingsCtrl.checkPayPhiStatus);
 
