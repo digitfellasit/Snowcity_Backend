@@ -494,6 +494,8 @@ exports.getBookingById = async function getBookingById(req, res, next) {
         mode: order.payment_mode,
         ref: order.payment_ref,
         txn_no: order.payment_txn_no,
+        method: order.payment_method,
+        datetime: order.payment_datetime,
         total: totalAmount,
         paid: finalAmount,
       },

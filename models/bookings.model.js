@@ -46,9 +46,9 @@ function mapBooking(row) {
     combo_title: row.combo_title || row.combo_name || null,
     item_title: row.item_title || row.attraction_title || row.combo_title || null,
 
-    // Slot details
     slot_start_time: row.slot_start_time || null,
     slot_end_time: row.slot_end_time || null,
+    time_slot_enabled: row.item_type === 'Combo' ? Boolean(row.create_slots) : Boolean(row.time_slot_enabled),
 
     // Offer details
     offer: row.offer_id ? {
@@ -88,6 +88,8 @@ function mapOrder(row) {
     payment_mode: row.payment_mode,
     payment_ref: row.payment_ref,
     payment_txn_no: row.payment_txn_no,
+    payment_method: row.payment_method || null,
+    payment_datetime: row.payment_datetime || null,
     created_at: row.created_at,
     // We might attach items here later manually
     items: []
@@ -136,7 +138,11 @@ async function getBaseSqlParts() {
         CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_target_type ELSE NULL END AS offer_get_target_type,
         CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_target_id ELSE NULL END AS offer_get_target_id,
         CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_discount_type ELSE NULL END AS offer_get_discount_type,
-        CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_discount_value ELSE NULL END AS offer_get_discount_value
+        CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_discount_value ELSE NULL END AS offer_get_discount_value,
+
+        -- Timing configs
+        a.time_slot_enabled,
+        c.create_slots
     `;
 
   const joins = `
@@ -157,14 +163,18 @@ async function getBaseSqlParts() {
 
 async function getBookingById(booking_id) {
   const { select, joins } = await getBaseSqlParts();
-  const { rows } = await pool.query(`SELECT ${select} FROM bookings b ${joins} WHERE b.booking_id = $1`, [booking_id]);
+  const isRef = typeof booking_id === 'string' && !/^\d+$/.test(booking_id);
+  const field = isRef ? 'b.booking_ref' : 'b.booking_id';
+  const { rows } = await pool.query(`SELECT ${select} FROM bookings b ${joins} WHERE ${field} = $1`, [booking_id]);
   return mapBooking(rows[0]);
 }
 
 // Get full Order details (The "Receipt" view)
 async function getOrderWithDetails(order_id) {
   // 1. Get Order
-  const orderRes = await pool.query(`SELECT * FROM orders WHERE order_id = $1`, [order_id]);
+  const isRef = typeof order_id === 'string' && !/^\d+$/.test(order_id);
+  const field = isRef ? 'order_ref' : 'order_id';
+  const orderRes = await pool.query(`SELECT * FROM orders WHERE ${field} = $1`, [order_id]);
   if (!orderRes.rows.length) return null;
   const order = mapOrder(orderRes.rows[0]);
 
@@ -172,7 +182,7 @@ async function getOrderWithDetails(order_id) {
   const { select, joins } = await getBaseSqlParts();
   const bookingRes = await pool.query(
     `SELECT ${select} FROM bookings b ${joins} WHERE b.order_id = $1 ORDER BY b.created_at ASC`,
-    [order_id]
+    [order.order_id]
   );
 
   // 3. Get Addons for each booking
@@ -594,7 +604,9 @@ async function updateBooking(booking_id, updates = {}) {
     'ticket_status',
     'ticket_pdf',
     'whatsapp_sent',
-    'email_sent'
+    'email_sent',
+    'payment_method',
+    'payment_datetime'
   ];
 
   const entries = allowedFields

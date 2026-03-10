@@ -162,8 +162,8 @@ exports.getOrderDetails = async (req, res, next) => {
     const userId = me(req);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const id = toInt(req.params.id, null);
-    if (!isPosInt(id)) return res.status(400).json({ error: 'Invalid ID' });
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: 'Order ID or Ref is required' });
 
     // Try to get Order (Parent)
     const order = await bookingsModel.getOrderWithDetails(id);
@@ -216,8 +216,8 @@ exports.initiatePayPhiPayment = async (req, res, next) => {
     const userId = me(req);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const id = toInt(req.params.id, null); // This is the ORDER ID
-    if (!isPosInt(id)) return res.status(400).json({ error: 'Invalid Order ID' });
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: 'Order ID or Ref is required' });
 
     // Verify Order ownership
     // We can do a quick DB check or let service handle it, but verifying user matches is safer here
@@ -245,8 +245,8 @@ exports.checkPayPhiStatus = async (req, res, next) => {
     const userId = me(req);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const id = toInt(req.params.id, null); // ORDER ID
-    if (!isPosInt(id)) return res.status(400).json({ error: 'Invalid Order ID' });
+    const id = req.params.id; // ORDER ID or REF
+    if (!id) return res.status(400).json({ error: 'Order ID or Ref is required' });
 
     const out = await bookingService.checkPayPhiStatus(id);
     res.json(out);
@@ -281,12 +281,11 @@ exports.initiatePhonePePayment = async (req, res, next) => {
     const userId = me(req);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const id = toInt(req.params.id, null); // This is the ORDER ID
-    if (!isPosInt(id)) {
-      console.warn(`[PhonePe] Invalid Order ID param: "${req.params.id}" (parsed: ${id})`);
+    const id = req.params.id; // ORDER ID or REF
+    if (!id) {
+      console.warn(`[PhonePe] Missing Order ID/Ref param`);
       return res.status(400).json({
-        error: 'Invalid Order ID',
-        details: `Expected a positive integer, received: "${req.params.id}"`
+        error: 'Order ID or Ref is required'
       });
     }
 
@@ -318,12 +317,11 @@ exports.checkPhonePeStatus = async (req, res, next) => {
     const userId = me(req);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const id = toInt(req.params.id, null); // ORDER ID
-    if (!isPosInt(id)) {
-      console.warn(`[PhonePe] Invalid Order ID param for status check: "${req.params.id}"`);
+    const id = req.params.id; // ORDER ID or REF
+    if (!id) {
+      console.warn(`[PhonePe] Missing Order ID/Ref param for status check`);
       return res.status(400).json({
-        error: 'Invalid Order ID',
-        details: `Expected a positive integer, received: "${req.params.id}"`
+        error: 'Order ID or Ref is required'
       });
     }
 
@@ -342,8 +340,8 @@ exports.downloadTicket = async (req, res, next) => {
     const userId = me(req);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const id = toInt(req.params.id, null);
-    if (!isPosInt(id)) return res.status(400).json({ error: 'Invalid Booking ID' });
+    const id = req.params.id; // Booking ID or Ref
+    if (!id) return res.status(400).json({ error: 'Booking ID or Ref is required' });
 
     // Verify ownership
     const booking = await bookingsModel.getBookingById(id);

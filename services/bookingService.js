@@ -792,7 +792,7 @@ async function createBookings(payload) {
       }
     }
 
-    return { order_id: orderId, order, bookings };
+    return { order_id: orderId, order_ref: order.order_ref, order, bookings };
   });
 }
 
@@ -802,12 +802,17 @@ const createBooking = createBookings;
 // -------- Payment & Status --------
 
 async function initiatePayPhiPayment({ bookingId, email, mobile, amount: frontendAmount }) {
-  // mapping param: bookingId -> orderId
-  const orderId = bookingId;
+  // bookingId here is the identifier from the URL (:id)
+  const identifier = bookingId;
+  const isNumeric = /^\d+$/.test(String(identifier));
 
-  const orderRes = await pool.query(`SELECT * FROM orders WHERE order_id = $1`, [orderId]);
+  const orderRes = isNumeric
+    ? await pool.query(`SELECT * FROM orders WHERE order_id = $1`, [parseInt(identifier)])
+    : await pool.query(`SELECT * FROM orders WHERE order_ref = $1`, [identifier]);
+
   if (!orderRes.rows.length) { const e = new Error('Order not found'); e.status = 404; throw e; }
   const order = orderRes.rows[0];
+  const orderId = order.order_id;
 
   if (order.payment_status === 'Completed') {
     const e = new Error('Payment already completed'); e.status = 400; throw e;
@@ -828,6 +833,7 @@ async function initiatePayPhiPayment({ bookingId, email, mobile, amount: fronten
     dbTotal,
     dbDiscount,
     dbFinalAmount: order.final_amount,
+    orderRef: order.order_ref,
     orderId,
   });
 
@@ -842,7 +848,7 @@ async function initiatePayPhiPayment({ bookingId, email, mobile, amount: fronten
     amount,
     customerEmailID: email,
     customerMobileNo: mobile,
-    addlParam1: String(orderId),
+    addlParam1: String(order.order_ref),
     addlParam2: 'GroupOrder'
   });
 
@@ -859,8 +865,12 @@ async function initiatePayPhiPayment({ bookingId, email, mobile, amount: fronten
   return { redirectUrl, tranCtx, responseCode, responseMessage, response: raw };
 }
 
-async function checkPayPhiStatus(orderId) {
-  const orderRes = await pool.query(`SELECT * FROM orders WHERE order_id = $1`, [orderId]);
+async function checkPayPhiStatus(orderIdOrRef) {
+  const isNumeric = /^\d+$/.test(String(orderIdOrRef));
+  const orderRes = isNumeric
+    ? await pool.query(`SELECT * FROM orders WHERE order_id = $1`, [parseInt(orderIdOrRef)])
+    : await pool.query(`SELECT * FROM orders WHERE order_ref = $1`, [orderIdOrRef]);
+
   if (!orderRes.rows.length) { const e = new Error('Order not found'); e.status = 404; throw e; }
   const order = orderRes.rows[0];
 
@@ -872,7 +882,8 @@ async function checkPayPhiStatus(orderId) {
   });
 
   console.log('🔍 DEBUG PayPhi Status Check:', {
-    orderId,
+    orderRef: order.order_ref,
+    orderId: order.order_id,
     merchantTxnNo,
     success,
     raw
@@ -894,27 +905,33 @@ async function checkPayPhiStatus(orderId) {
 
   // ── SUCCESS: update DB to Completed + CONFIRMED ──
   if (success && order.payment_status !== 'Completed') {
-    const txnId = raw?.transactionId || raw?.txnId || raw?.transactionValue ||
-      raw?.data?.transactionId || raw?.response?.transactionId ||
+    const txnId = raw?.transactionId || raw?.txnId || raw?.txnID || raw?.transactionValue ||
+      raw?.merchantTxnNo || raw?.data?.transactionId || raw?.response?.transactionId ||
       order.payment_ref || merchantTxnNo;
 
     console.log('🔍 DEBUG PayPhi Updating Payment Status:', {
-      orderId,
+      orderRef: order.order_ref,
+      orderId: order.order_id,
       txnId,
       status: 'Completed'
     });
 
     await withTransaction(async (client) => {
-      // Update Order — payment_status='Completed' is valid enum value
+      // paymentMode/paymentType from PayPhi (e.g. UPI, CC, DC, NB)
+      const paymentMethod = raw?.paymentMode || raw?.paymentType || raw?.payType || null;
+      // txnDate or paymentDateTime from PayPhi (e.g. 20260310125738)
+      const paymentDateTime = raw?.paymentDateTime || raw?.txnDate || raw?.txnDateTime || null;
+
+      // Update Order
       await client.query(
-        `UPDATE orders SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PayPhi', updated_at = NOW() WHERE order_id = $2`,
-        [txnId, order.order_id]
+        `UPDATE orders SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PayPhi', payment_method = $2, payment_datetime = $3, updated_at = NOW() WHERE order_id = $4`,
+        [txnId, paymentMethod, paymentDateTime, order.order_id]
       );
 
-      // Update Bookings — payment_status='Completed', booking_status='CONFIRMED' are valid enum values
+      // Update Bookings
       await client.query(
-        `UPDATE bookings SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PayPhi', booking_status = 'CONFIRMED', updated_at = NOW() WHERE order_id = $2`,
-        [txnId, order.order_id]
+        `UPDATE bookings SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PayPhi', payment_method = $2, payment_datetime = $3, booking_status = 'CONFIRMED', updated_at = NOW() WHERE order_id = $4`,
+        [txnId, paymentMethod, paymentDateTime, order.order_id]
       );
     });
 
@@ -953,7 +970,12 @@ async function checkPayPhiStatus(orderId) {
 
   // ── EXPLICIT FAILURE: update DB to Failed ──
   if (isExplicitFail && order.payment_status !== 'Failed') {
-    console.log('🔍 DEBUG PayPhi Payment FAILED:', { orderId, rawCode, rawStatus });
+    console.log('🔍 DEBUG PayPhi Payment FAILED:', {
+      orderRef: order.order_ref,
+      orderId: order.order_id,
+      rawCode,
+      rawStatus
+    });
 
     await withTransaction(async (client) => {
       // Update Order — payment_status='Failed' is valid enum value
@@ -979,12 +1001,16 @@ async function checkPayPhiStatus(orderId) {
 // -------- PhonePe Payment --------
 
 async function initiatePhonePePayment({ bookingId, email, mobile, amount: frontendAmount }) {
-  // mapping param: bookingId -> orderId
-  const orderId = bookingId;
+  const identifier = bookingId;
+  const isNumeric = /^\d+$/.test(String(identifier));
 
-  const orderRes = await pool.query(`SELECT * FROM orders WHERE order_id = $1`, [orderId]);
+  const orderRes = isNumeric
+    ? await pool.query(`SELECT * FROM orders WHERE order_id = $1`, [parseInt(identifier)])
+    : await pool.query(`SELECT * FROM orders WHERE order_ref = $1`, [identifier]);
+
   if (!orderRes.rows.length) { const e = new Error('Order not found'); e.status = 404; throw e; }
   const order = orderRes.rows[0];
+  const orderId = order.order_id;
 
   if (order.payment_status === 'Completed') {
     const e = new Error('Payment already completed'); e.status = 400; throw e;
@@ -1003,6 +1029,7 @@ async function initiatePhonePePayment({ bookingId, email, mobile, amount: fronte
     dbTotal,
     dbDiscount,
     dbFinalAmount: order.final_amount,
+    orderRef: order.order_ref,
     orderId,
   });
 
@@ -1090,16 +1117,25 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
     const txnId = raw?.transactionId || merchantTxnNo;
 
     await withTransaction(async (client) => {
-      // Update Order — payment_status='Completed' is valid enum value
+      // Extract payment method from PhonePe response (e.g. UPI, CARD, NETBANKING)
+      const paymentMethod = raw?.paymentInstrument?.type || null;
+      // PhonePe doesn't have a single "paymentDateTime" string in this format usually, 
+      // but we can use the current timestamp in YYYYMMDDHHmmss format if missing or format their timestamp
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const defaultDateTime = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+      const paymentDateTime = raw?.completedAt ? String(raw.completedAt).replace(/[-T:Z]/g, '').slice(0, 14) : defaultDateTime;
+
+      // Update Order
       await client.query(
-        `UPDATE orders SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PhonePe', updated_at = NOW() WHERE order_id = $2`,
-        [txnId, order.order_id]
+        `UPDATE orders SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PhonePe', payment_method = $2, payment_datetime = $3, updated_at = NOW() WHERE order_id = $4`,
+        [txnId, paymentMethod, paymentDateTime, order.order_id]
       );
 
-      // Update Bookings — payment_status='Completed', booking_status='CONFIRMED' are valid enum values
+      // Update Bookings
       await client.query(
-        `UPDATE bookings SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PhonePe', booking_status = 'CONFIRMED', updated_at = NOW() WHERE order_id = $2`,
-        [txnId, order.order_id]
+        `UPDATE bookings SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PhonePe', payment_method = $2, payment_datetime = $3, booking_status = 'CONFIRMED', updated_at = NOW() WHERE order_id = $4`,
+        [txnId, paymentMethod, paymentDateTime, order.order_id]
       );
     });
 

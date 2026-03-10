@@ -231,18 +231,6 @@ async function drawConsolidatedTicket(doc, data) {
   doc.fillColor(C.white).text('Confirmed!', startX + part1W + partIsW, headY, { lineBreak: false });
   doc.restore();
 
-  // Sub-line: date | attraction | time  (pulled from first item)
-  if (items.length > 0) {
-    const first    = items[0];
-    const subDate  = dayjs(first.booking_date).format('dddd, D MMMM YYYY');
-    const subSlot  = getSlotDisplay(first);
-    const subTitle = first.item_title || '';
-    const subLine  = `${subDate}  |  ${subTitle}  |  ${subSlot}`;
-
-    doc.font('Helvetica').fontSize(9).fillColor('rgba(255,255,255,0.85)')
-      .text(subLine, 0, headY + 40, { width: PW, align: 'center' });
-  }
-
   // Temperature badge (Snow Park specific)
   const hasSnow = items.some(i => (i.item_title || '').toLowerCase().includes('snow'));
   if (hasSnow) {
@@ -346,14 +334,18 @@ async function drawConsolidatedTicket(doc, data) {
 
     // Labels
     doc.font('Helvetica').fontSize(7).fillColor(C.veryLight);
-    doc.text('VISIT DATE',  col1, infoY);
-    doc.text('TIME SLOT',   col2, infoY);
-    doc.text('QTY',         col3, infoY);
+    doc.text('VISIT DATE', col1, infoY);
+    if (item.time_slot_enabled !== false) {
+      doc.text('TIME SLOT', col2, infoY);
+    }
+    doc.text('QTY', col3, infoY);
 
     // Values
     doc.font('Helvetica-Bold').fontSize(10).fillColor(C.text);
     doc.text(dateStr, col1, infoY + 11);
-    doc.text(slotStr, col2, infoY + 11);
+    if (item.time_slot_enabled !== false) {
+      doc.text(slotStr, col2, infoY + 11);
+    }
     doc.font('Helvetica-Bold').fontSize(18).fillColor(C.navy)
       .text(String(qty), col3, infoY + 8);
 
