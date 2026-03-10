@@ -157,7 +157,7 @@ async function sendTicketEmail(booking_id) {
   // Get order details for complete information
   const order = b.order_id ? await bookingsModel.getOrderWithDetails(b.order_id) : null;
 
-  const subject = `Snow City Bangalore - Booking Confirmed!`;
+  const subject = `Your booking (${b.booking_ref}) with Snow City Bangalore is Confirmed`;
   const text = `Hello${user?.name ? ' ' + user.name : ''},\n\nYour Snow City Bangalore booking has been confirmed.\nBooking Ref: ${b.booking_ref}\n\nEnjoy your visit!`;
 
   // Format order date

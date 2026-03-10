@@ -227,8 +227,8 @@ async function drawConsolidatedTicket(doc, data) {
   const startX = (PW - totalW) / 2;
 
   doc.fillColor(C.white).text('Your Booking ', startX, headY, { lineBreak: false, continued: false });
-  doc.fillColor(C.accent).text('is ', startX + part1W, headY, { lineBreak: false, continued: false });
-  doc.fillColor(C.white).text('Confirmed!', startX + part1W + partIsW, headY, { lineBreak: false });
+  doc.fillColor(C.white).text('is ', startX + part1W, headY, { lineBreak: false, continued: false });
+  doc.fillColor(C.accent).text('Confirmed!', startX + part1W + partIsW, headY, { lineBreak: false });
   doc.restore();
 
   // Temperature badge (Snow Park specific)
@@ -402,17 +402,7 @@ async function drawConsolidatedTicket(doc, data) {
     .text(money(totalAmount), M, totalY);
 
   // Payment status badge
-  const statusBadgeX = PW - M - 110;
-  doc.roundedRect(statusBadgeX, totalY + 2, 110, 22, 4).fill('#E8F5E9');
-  doc.font('Helvetica-Bold').fontSize(9).fillColor(C.paidGreen)
-    .text('PAID IN FULL  ✓', statusBadgeX, totalY + 8, { width: 110, align: 'center' });
-
-  doc.font('Helvetica').fontSize(7.5).fillColor(C.lightText)
-    .text('Official payment confirmation.', PW - M - 200, totalY + 28, { width: 200, align: 'right' });
-  doc.text('No separate invoice will be issued.', PW - M - 200, totalY + 38, { width: 200, align: 'right' });
-
-  y += 65;
-
+  
   // ═══════════════════════════════════════════════════════════════
   // 6.  KNOW BEFORE YOU GO
   // ═══════════════════════════════════════════════════════════════
@@ -430,7 +420,7 @@ async function drawConsolidatedTicket(doc, data) {
   const tips = [
     'Jacket, boots & gloves are provided FREE — no need to bring your own.',
     'Arrive 15 minutes before your slot for gear fitting. Late arrivals get reduced time.',
-    'Keep this ticket (digital or printed) for ready scanning at the entrance gate.',
+    'Validate this ticket at the online counter of Snow Park',
     'No outside food or beverages inside the snow chamber. Snowman Cafe is on-site.',
     'Tickets are non-cancellable, non-refundable and non-transferable.',
     'Park timings subject to change. Check snowcityblr.com before your visit.',
@@ -473,8 +463,8 @@ async function drawConsolidatedTicket(doc, data) {
     { label: 'TIMINGS',     lines: ['10:00 AM – 8:00 PM', 'All days, year-round'] },
   ];
 
-  const colW    = (PW - M * 2 - 20) / footerCols.length;
-  const fStartX = M + 80; // offset past logo
+  const colW    = (PW - M * 2) / footerCols.length;
+  const fStartX = M;
 
   footerCols.forEach((col, i) => {
     const fx = fStartX + i * colW;
