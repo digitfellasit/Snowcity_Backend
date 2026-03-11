@@ -970,24 +970,32 @@ async function checkPayPhiStatus(orderIdOrRef) {
 
   // ── EXPLICIT FAILURE: update DB to Failed ──
   if (isExplicitFail && order.payment_status !== 'Failed') {
+    const txnId = raw?.transactionId || raw?.txnId || raw?.txnID || raw?.transactionValue ||
+      raw?.merchantTxnNo || raw?.data?.transactionId || raw?.response?.transactionId ||
+      order.payment_ref || merchantTxnNo;
+
     console.log('🔍 DEBUG PayPhi Payment FAILED:', {
       orderRef: order.order_ref,
       orderId: order.order_id,
       rawCode,
-      rawStatus
+      rawStatus,
+      txnId
     });
 
     await withTransaction(async (client) => {
+      const paymentMethod = raw?.paymentMode || raw?.paymentType || raw?.payType || null;
+      const paymentDateTime = raw?.paymentDateTime || raw?.txnDate || raw?.txnDateTime || null;
+
       // Update Order — payment_status='Failed' is valid enum value
       await client.query(
-        `UPDATE orders SET payment_status = 'Failed', payment_mode = 'PayPhi', updated_at = NOW() WHERE order_id = $1`,
-        [order.order_id]
+        `UPDATE orders SET payment_status = 'Failed', payment_ref = $1, payment_mode = 'PayPhi', payment_method = $2, payment_datetime = $3, updated_at = NOW() WHERE order_id = $4`,
+        [txnId, paymentMethod, paymentDateTime, order.order_id]
       );
 
       // Update Bookings — payment_status='Failed', booking_status stays 'PENDING_PAYMENT'
       await client.query(
-        `UPDATE bookings SET payment_status = 'Failed', payment_mode = 'PayPhi', updated_at = NOW() WHERE order_id = $1`,
-        [order.order_id]
+        `UPDATE bookings SET payment_status = 'Failed', payment_ref = $1, payment_mode = 'PayPhi', payment_method = $2, payment_datetime = $3, updated_at = NOW() WHERE order_id = $4`,
+        [txnId, paymentMethod, paymentDateTime, order.order_id]
       );
     });
 
@@ -1118,13 +1126,14 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
 
     await withTransaction(async (client) => {
       // Extract payment method from PhonePe response (e.g. UPI, CARD, NETBANKING)
-      const paymentMethod = raw?.paymentInstrument?.type || null;
+      const paymentMethod = raw?.paymentInstrument?.type || raw?.paymentDetails?.[0]?.paymentMode || raw?.fullResponse?.paymentDetails?.[0]?.paymentMode || null;
       // PhonePe doesn't have a single "paymentDateTime" string in this format usually, 
       // but we can use the current timestamp in YYYYMMDDHHmmss format if missing or format their timestamp
       const now = new Date();
       const pad = (n) => String(n).padStart(2, '0');
       const defaultDateTime = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-      const paymentDateTime = raw?.completedAt ? String(raw.completedAt).replace(/[-T:Z]/g, '').slice(0, 14) : defaultDateTime;
+      const ts = raw?.paymentDetails?.[0]?.timestamp || raw?.fullResponse?.paymentDetails?.[0]?.timestamp || raw?.completedAt;
+      const paymentDateTime = ts ? new Date(ts).toISOString().replace(/[-T:Z]/g, '').slice(0, 14) : defaultDateTime;
 
       // Update Order
       await client.query(
@@ -1174,19 +1183,27 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
 
   // ── EXPLICIT FAILURE: update DB to Failed ──
   if (isExplicitFail && order.payment_status !== 'Failed') {
-    console.log('🔍 DEBUG PhonePe Payment FAILED:', { orderId: order.order_id, rawState });
+    const txnId = raw?.transactionId || merchantTxnNo;
+    console.log('🔍 DEBUG PhonePe Payment FAILED:', { orderId: order.order_id, rawState, txnId });
 
     await withTransaction(async (client) => {
+      const paymentMethod = raw?.paymentInstrument?.type || raw?.paymentDetails?.[0]?.paymentMode || raw?.fullResponse?.paymentDetails?.[0]?.paymentMode || null;
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const defaultDateTime = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+      const ts = raw?.paymentDetails?.[0]?.timestamp || raw?.fullResponse?.paymentDetails?.[0]?.timestamp || raw?.completedAt;
+      const paymentDateTime = ts ? new Date(ts).toISOString().replace(/[-T:Z]/g, '').slice(0, 14) : defaultDateTime;
+
       // Update Order — payment_status='Failed' is valid enum value
       await client.query(
-        `UPDATE orders SET payment_status = 'Failed', payment_mode = 'PhonePe', updated_at = NOW() WHERE order_id = $1`,
-        [order.order_id]
+        `UPDATE orders SET payment_status = 'Failed', payment_ref = $1, payment_mode = 'PhonePe', payment_method = $2, payment_datetime = $3, updated_at = NOW() WHERE order_id = $4`,
+        [txnId, paymentMethod, paymentDateTime, order.order_id]
       );
 
       // Update Bookings — payment_status='Failed', booking_status stays 'PENDING_PAYMENT'
       await client.query(
-        `UPDATE bookings SET payment_status = 'Failed', payment_mode = 'PhonePe', updated_at = NOW() WHERE order_id = $1`,
-        [order.order_id]
+        `UPDATE bookings SET payment_status = 'Failed', payment_ref = $1, payment_mode = 'PhonePe', payment_method = $2, payment_datetime = $3, updated_at = NOW() WHERE order_id = $4`,
+        [txnId, paymentMethod, paymentDateTime, order.order_id]
       );
     });
 
