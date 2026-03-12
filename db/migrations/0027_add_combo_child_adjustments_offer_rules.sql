@@ -1,0 +1,1 @@
+ALTER TABLE offer_rules ADD COLUMN combo_child_adjustments JSONB;

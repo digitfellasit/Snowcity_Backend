@@ -57,7 +57,7 @@ function matchesDayRule(rule, date, holidays = []) {
     return true; // No day restriction
   }
 
-  const dayOfWeek = date.getDay();
+  const dayOfWeek = date.getUTCDay(); // Evaluate exactly as parsed (UTC)
   const dateStr = date.toISOString().split('T')[0];
 
   switch (rule.day_type) {
@@ -193,6 +193,25 @@ async function calculateDynamicPrice({ itemType, itemId, basePrice, date, time, 
 
     for (const rule of dynamicPricingRules) {
       let adjustment = 0;
+
+      // Check if rule has per-child price adjustments (combo pricing)
+      if (rule.child_price_adjustments && typeof rule.child_price_adjustments === 'object' && Object.keys(rule.child_price_adjustments).length > 0) {
+        // Sum of all child prices = new combo price
+        const childTotal = Object.values(rule.child_price_adjustments).reduce((sum, val) => sum + (Number(val) || 0), 0);
+        if (childTotal > 0) {
+          finalPrice = childTotal;
+          appliedRules.push({
+            ruleId: rule.rule_id,
+            ruleName: rule.name,
+            adjustmentType: 'child_pricing',
+            adjustmentValue: childTotal,
+            adjustmentAmount: childTotal - effectiveBasePrice,
+            childPriceAdjustments: rule.child_price_adjustments,
+            type: 'dynamic_pricing_adjustment'
+          });
+          continue;
+        }
+      }
 
       if (rule.price_adjustment_type === 'fixed') {
         adjustment = Number(rule.price_adjustment_value) || 0;

@@ -179,7 +179,7 @@ async function drawConsolidatedTicket(doc, data) {
   doc.font('Helvetica-Bold').fontSize(20).fillColor(C.navy)
     .text(orderRef || '', rightX - 175, labelY + 11, { width: 175, align: 'right' });
   doc.font('Helvetica').fontSize(7.5).fillColor(C.lightText)
-    .text(`Order Date: ${fmtDateShort(orderDate)}`, rightX - 175, labelY + 34, { width: 175, align: 'right' });
+    .text(`Booking Placed On: ${fmtDateShort(orderDate)}`, rightX - 175, labelY + 34, { width: 175, align: 'right' });
 
   // Thin bottom border on header
   doc.moveTo(0, headerH).lineTo(PW, headerH).strokeColor('#D0D8E8').lineWidth(1).stroke();
@@ -418,6 +418,7 @@ async function drawConsolidatedTicket(doc, data) {
     .text('Know Before You Go', M + 14, y + 12);
 
   const tips = [
+    'Socks are compulsory and available at additional cost.',
     'Jacket, boots & gloves are provided FREE — no need to bring your own.',
     'Arrive 15 minutes before your slot for gear fitting. Late arrivals get reduced time.',
     'Validate this ticket at the online counter of Snow Park',

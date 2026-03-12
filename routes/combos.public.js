@@ -1,6 +1,8 @@
 // site/routes/combos.public.js
 const router = require('express').Router();
 const { pool } = require('../config/db');
+const comboService = require('../services/comboService');
+const comboSlotsController = require('../user/controllers/comboSlots.controller');
 
 // GET /api/combos?active=true
 router.get('/combos', async (req, res, next) => {
@@ -80,8 +82,14 @@ router.get('/combos/:id/slots', async (req, res, next) => {
       return `${String(h).padStart(2, '0')}.${String(M || 0).padStart(2, '0')}${ap}`;
     };
 
+    const combo = await comboService.getById(id);
+    let enrichedRows = rows;
+    if (combo && enrichedRows.length > 0) {
+      enrichedRows = await comboSlotsController.mapSlotsWithPricing(rows, combo, date);
+    }
+
     res.json(
-      rows.map((r) => ({
+      enrichedRows.map((r) => ({
         ...r,
         start_time_12h: to12(r.start_time),
         end_time_12h: to12(r.end_time),

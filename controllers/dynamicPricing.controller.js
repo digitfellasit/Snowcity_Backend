@@ -115,6 +115,29 @@ class DynamicPricingController {
         });
       }
 
+      // Validate day_selection_mode
+      const validModes = ['all_days', 'weekends_only', 'custom_weekdays', 'specific_dates'];
+      if (ruleData.day_selection_mode && !validModes.includes(ruleData.day_selection_mode)) {
+        return res.status(400).json({
+          success: false,
+          error: `day_selection_mode must be one of: ${validModes.join(', ')}`,
+        });
+      }
+
+      if (ruleData.day_selection_mode === 'custom_weekdays' && (!Array.isArray(ruleData.selected_weekdays) || ruleData.selected_weekdays.length === 0)) {
+        return res.status(400).json({
+          success: false,
+          error: 'selected_weekdays is required when day_selection_mode is custom_weekdays',
+        });
+      }
+
+      if (ruleData.day_selection_mode === 'specific_dates' && (!Array.isArray(ruleData.custom_dates) || ruleData.custom_dates.length === 0)) {
+        return res.status(400).json({
+          success: false,
+          error: 'custom_dates is required when day_selection_mode is specific_dates',
+        });
+      }
+
       const rule = await dynamicPricingModel.createRule(ruleData);
 
       res.status(201).json({

@@ -99,7 +99,7 @@ async function applyOfferPricing({
   let discountType = rule?.rule_discount_type || offer.discount_type || (offer.discount_percent ? 'percent' : null);
   let discountValue = rule?.rule_discount_value ?? offer.discount_value ?? offer.discount_percent ?? 0;
 
-  if (!discountType || !discountValue) {
+  if (!discountType || (discountValue === 0 && !rule?.combo_child_adjustments)) {
     return { unit: base, discount: 0, discount_percent: 0, offer: null };
   }
 
@@ -129,6 +129,7 @@ async function applyOfferPricing({
       discount_type: discountType,
       discount_value: toNumber(discountValue, 0),
       max_discount: offer.max_discount != null ? Number(offer.max_discount) : null,
+      combo_child_adjustments: rule.combo_child_adjustments || null,
     },
   };
 }

@@ -9,6 +9,9 @@ router.use(requireAuth);
 // GET /api/admin/combo-date-prices/:combo_id - Get all date prices for combo
 router.get('/:combo_id', comboDatePricesCtrl.getPrices);
 
+// GET /api/admin/combo-date-prices/:combo_id/children/:date - Get child attraction prices for date
+router.get('/:combo_id/children/:date', comboDatePricesCtrl.getChildAttractionPrices);
+
 // POST /api/admin/combo-date-prices/:combo_id/bulk - Bulk set prices for multiple dates
 router.post('/:combo_id/bulk', comboDatePricesCtrl.bulkSetPrices);
 
@@ -19,3 +22,4 @@ router.put('/:combo_id/:date', comboDatePricesCtrl.setPrice);
 router.delete('/:combo_id/:date', comboDatePricesCtrl.deletePrice);
 
 module.exports = router;
+

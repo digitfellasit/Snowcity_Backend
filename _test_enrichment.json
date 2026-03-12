@@ -1,0 +1,57 @@
+﻿[dotenv@17.2.3] injecting env (81) from .env -- tip: Γ£à audit secrets and track compliance: https://dotenvx.com/ops
+Testing combo ID: 20
+Found 2 raw slots.
+Raw Slot 0 price: 0.00
+[32minfo[39m: PostgreSQL connected {"database":"snowcity","host":"database-1.cf4cq0uc02xu.ap-south-1.rds.amazonaws.com","poolMax":20,"port":5432,"service":"snowcity-api","ssl":true,"timestamp":"2026-03-12T12:43:49.018Z","timezone":"UTC","user":"postgres"}
+
+=== Enriched Slot payload ===
+{
+  "combo_slot_id": "5788",
+  "combo_id": "20",
+  "start_date": "2026-03-13T18:30:00.000Z",
+  "end_date": "2026-03-13T18:30:00.000Z",
+  "start_time": "10:00:00",
+  "end_time": "11:00:00",
+  "capacity": 300,
+  "price": 1000,
+  "available": true,
+  "base_price": "0.00",
+  "original_price": "0.00",
+  "discount_amount": 0,
+  "applied_rules": [
+    {
+      "ruleId": 4,
+      "ruleName": "weekend msb",
+      "adjustmentType": "child_pricing",
+      "adjustmentValue": 1000,
+      "adjustmentAmount": 1000,
+      "childPriceAdjustments": {
+        "20": 300,
+        "21": 700
+      },
+      "type": "dynamic_pricing_adjustment"
+    }
+  ],
+  "dynamic_pricing_active": true,
+  "pricing": {
+    "base_price": "0.00",
+    "final_price": 1000,
+    "original_price": "0.00",
+    "discount_amount": 0,
+    "applied_rules": [
+      {
+        "ruleId": 4,
+        "ruleName": "weekend msb",
+        "adjustmentType": "child_pricing",
+        "adjustmentValue": 1000,
+        "adjustmentAmount": 1000,
+        "childPriceAdjustments": {
+          "20": 300,
+          "21": 700
+        },
+        "type": "dynamic_pricing_adjustment"
+      }
+    ],
+    "dynamic_pricing_active": true
+  }
+}

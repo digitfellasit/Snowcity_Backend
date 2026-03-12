@@ -10,6 +10,10 @@ function mapDynamicPricingRule(row) {
     target_type: row.target_type,
     target_id: row.target_id,
     date_ranges: row.date_ranges || [],
+    day_selection_mode: row.day_selection_mode || 'all_days',
+    selected_weekdays: row.selected_weekdays || null,
+    custom_dates: row.custom_dates || null,
+    child_price_adjustments: row.child_price_adjustments || null,
     price_adjustment_type: row.price_adjustment_type,
     price_adjustment_value: Number(row.price_adjustment_value),
     active: Boolean(row.active),
@@ -24,16 +28,20 @@ async function createRule({
   target_type,
   target_id,
   date_ranges,
+  day_selection_mode = 'all_days',
+  selected_weekdays = null,
+  custom_dates = null,
+  child_price_adjustments = null,
   price_adjustment_type,
   price_adjustment_value,
   active = true,
 }) {
   const { rows } = await pool.query(
     `INSERT INTO dynamic_pricing_rules
-     (name, description, target_type, target_id, date_ranges, price_adjustment_type, price_adjustment_value, active)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     (name, description, target_type, target_id, date_ranges, day_selection_mode, selected_weekdays, custom_dates, child_price_adjustments, price_adjustment_type, price_adjustment_value, active)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
-    [name, description, target_type, target_id, JSON.stringify(date_ranges), price_adjustment_type, price_adjustment_value, active]
+    [name, description, target_type, target_id, JSON.stringify(date_ranges), day_selection_mode, selected_weekdays || null, custom_dates || null, child_price_adjustments ? JSON.stringify(child_price_adjustments) : null, price_adjustment_type, price_adjustment_value, active]
   );
   return mapDynamicPricingRule(rows[0]);
 }
@@ -94,8 +102,10 @@ async function updateRule(rule_id, updates) {
   Object.keys(updates).forEach(key => {
     if (updates[key] !== undefined) {
       fields.push(`${key} = $${paramIndex}`);
-      // Stringify date_ranges if it's an array
-      const value = key === 'date_ranges' && Array.isArray(updates[key]) ? JSON.stringify(updates[key]) : updates[key];
+      // Stringify JSON fields
+      let value = updates[key];
+      if (key === 'date_ranges' && Array.isArray(value)) value = JSON.stringify(value);
+      if (key === 'child_price_adjustments' && value && typeof value === 'object') value = JSON.stringify(value);
       params.push(value);
       paramIndex++;
     }
@@ -121,6 +131,37 @@ async function deleteRule(rule_id) {
   return mapDynamicPricingRule(rows[0]);
 }
 
+/**
+ * Check if a booking date matches the rule's day selection mode
+ */
+function matchesDaySelectionMode(rule, bookingDate) {
+  const mode = rule.day_selection_mode || 'all_days';
+  if (mode === 'all_days') return true;
+
+  const date = new Date(bookingDate);
+  const dayOfWeek = date.getUTCDay(); // 0=Sun, 6=Sat
+
+  if (mode === 'weekends_only') {
+    return dayOfWeek === 0 || dayOfWeek === 6;
+  }
+
+  if (mode === 'custom_weekdays') {
+    const weekdays = rule.selected_weekdays || [];
+    return weekdays.includes(dayOfWeek);
+  }
+
+  if (mode === 'specific_dates') {
+    const customDates = (rule.custom_dates || []).map(d => {
+      const dt = new Date(d);
+      return dt.toISOString().split('T')[0];
+    });
+    const dateStr = date.toISOString().split('T')[0];
+    return customDates.includes(dateStr);
+  }
+
+  return true;
+}
+
 async function getApplicableRules(targetType, targetId, bookingDate) {
   // Get rules that apply to this specific target
   const specificRules = await getRules({
@@ -137,7 +178,9 @@ async function getApplicableRules(targetType, targetId, bookingDate) {
     active: true,
   });
 
-  return [...specificRules, ...allRules];
+  // Filter by day selection mode
+  const allCandidates = [...specificRules, ...allRules];
+  return allCandidates.filter(rule => matchesDaySelectionMode(rule, bookingDate));
 }
 
 module.exports = {

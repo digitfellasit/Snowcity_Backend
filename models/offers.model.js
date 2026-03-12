@@ -55,6 +55,7 @@ function mapRule(row) {
     is_holiday: !!row.is_holiday,
     specific_date: row.specific_date,
     specific_time: row.specific_time,
+    combo_child_adjustments: row.combo_child_adjustments,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -91,6 +92,7 @@ async function replaceOfferRules(offer_id, rules = []) {
     'is_holiday',
     'specific_date',
     'specific_time',
+    'combo_child_adjustments',
   ];
 
   const values = [];
@@ -118,7 +120,8 @@ async function replaceOfferRules(offer_id, rules = []) {
       rule?.specific_days ?? rule?.specificDays ?? null,
       !!rule?.is_holiday,
       (rule?.specific_date ?? rule?.specificDate ?? null) || null,
-      (rule?.specific_time ?? rule?.specificTime ?? null) || null
+      (rule?.specific_time ?? rule?.specificTime ?? null) || null,
+      rule?.combo_child_adjustments ? JSON.stringify(rule.combo_child_adjustments) : null
     );
   });
 
@@ -458,20 +461,38 @@ const enrichGeneratedSlotWithPricing = async (slot, offer, targetType) => {
     booking_time: slot.start_time || null,
   });
 
+  let finalPrice = pricing.unit;
+  let discountAmount = pricing.discount;
+  let discountPercent = pricing.discount_percent;
+
+  const childAdjustments = pricing?.offer?.combo_child_adjustments;
+  if (targetType === 'combo' && childAdjustments && targetDetails?.attraction_prices) {
+    let newTotal = 0;
+    const attractionPrices = { ...targetDetails.attraction_prices };
+    for (const [attrId, price] of Object.entries(attractionPrices)) {
+      const increment = Number(childAdjustments[attrId]) || 0;
+      const adjustedPrice = Math.max(0, Number(price) + increment);
+      newTotal += adjustedPrice;
+    }
+    finalPrice = newTotal;
+    discountAmount = resolvedBase - finalPrice;
+    discountPercent = resolvedBase > 0 ? (discountAmount / resolvedBase) * 100 : 0;
+  }
+
   return {
     ...slot,
     base_price: resolvedBase,
-    price: pricing.unit,
+    price: finalPrice,
     pricing: {
       base_price: resolvedBase,
-      final_price: pricing.unit,
-      discount_amount: pricing.discount,
-      discount_percent: pricing.discount_percent,
+      final_price: finalPrice,
+      discount_amount: discountAmount,
+      discount_percent: discountPercent,
       offer: pricing.offer,
     },
     offer: pricing.offer,
-    offer_discount: pricing.discount,
-    offer_discount_percent: pricing.discount_percent,
+    offer_discount: discountAmount,
+    offer_discount_percent: discountPercent,
   };
 };
 

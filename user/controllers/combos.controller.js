@@ -1,72 +1,7 @@
 const comboService = require('../../services/comboService');
 const { applyOfferPricing } = require('../../services/offerPricing');
 
-const toNumber = (value, fallback = 0) => {
-  const num = Number(value);
-  return Number.isFinite(num) ? num : fallback;
-};
-
-const resolveComboSlotBasePrice = (slot = {}, combo = {}) => {
-  return (
-    toNumber(slot.base_price, 0) ||
-    toNumber(slot.price, 0) ||
-    toNumber(combo?.pricing?.base_price, 0) ||
-    toNumber(
-      combo?.combo_price ??
-      combo?.price ??
-      combo?.total_price ??
-      combo?.starting_price ??
-      combo?.min_price ??
-      0,
-      0
-    )
-  );
-};
-
-const normalizeComboSlotId = (slot = {}) => {
-  if (!slot?.combo_slot_id) return null;
-  const numeric = Number(slot.combo_slot_id);
-  return Number.isFinite(numeric) ? numeric : null;
-};
-
-const enrichComboSlotWithPricing = async (slot, combo) => {
-  if (!slot || !combo) return slot;
-  const basePrice = resolveComboSlotBasePrice(slot, combo);
-  if (!basePrice) {
-    return { ...slot, base_price: 0, price: 0 };
-  }
-
-  const offerPricing = await applyOfferPricing({
-    targetType: 'combo',
-    targetId: combo.combo_id || combo.id,
-    slotType: 'combo',
-    slotId: normalizeComboSlotId(slot),
-    baseAmount: basePrice,
-    booking_date: slot.start_date || slot.date || null,
-    booking_time: slot.start_time || null,
-  });
-
-  return {
-    ...slot,
-    base_price: basePrice,
-    price: offerPricing.unit,
-    offer: offerPricing.offer,
-    offer_discount: offerPricing.discount,
-    offer_discount_percent: offerPricing.discount_percent,
-    pricing: {
-      base_price: basePrice,
-      final_price: offerPricing.unit,
-      discount_amount: offerPricing.discount,
-      discount_percent: offerPricing.discount_percent,
-      offer: offerPricing.offer,
-    },
-  };
-};
-
-const mapComboSlotsWithPricing = async (slots = [], combo = null) => {
-  if (!combo || !Array.isArray(slots) || !slots.length) return slots;
-  return Promise.all(slots.map((slot) => enrichComboSlotWithPricing(slot, combo)));
-};
+const comboSlotsController = require('./comboSlots.controller');
 
 // GET /api/combos
 exports.listCombos = async (req, res, next) => {
@@ -168,8 +103,7 @@ exports.getComboSlots = async (req, res, next) => {
         total_price: combo.total_price
       }
     }));
-
-    const slotsWithPricing = await mapComboSlotsWithPricing(slotsWithComboDetails, combo);
+    const slotsWithPricing = await comboSlotsController.mapSlotsWithPricing(slotsWithComboDetails, combo, date);
 
     const response = {
       data: slotsWithPricing,

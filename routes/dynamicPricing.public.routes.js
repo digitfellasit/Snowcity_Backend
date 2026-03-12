@@ -45,6 +45,8 @@ router.get('/check', async (req, res, next) => {
                     name: r.name,
                     price_adjustment_type: r.price_adjustment_type,
                     price_adjustment_value: r.price_adjustment_value,
+                    child_price_adjustments: r.child_price_adjustments || null,
+                    day_selection_mode: r.day_selection_mode || 'all_days',
                 }))
                 : [],
         });
