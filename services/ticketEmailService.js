@@ -18,8 +18,25 @@ function loadTicketTemplate() {
   return _ticketTemplate;
 }
 
+const LOGO_PATH = path.join(__dirname, '..', 'utils', 'loading.png');
+let _logoBase64 = null;
+
+function getLogoBase64() {
+  if (_logoBase64 !== null) return _logoBase64;
+  try {
+    const buffer = fs.readFileSync(LOGO_PATH);
+    _logoBase64 = `data:image/png;base64,${buffer.toString('base64')}`;
+  } catch (e) {
+    console.error('Failed to load email logo:', e);
+    _logoBase64 = '';
+  }
+  return _logoBase64;
+}
+
 function renderTicketTemplate(vars = {}) {
   const tpl = loadTicketTemplate();
+  const logo_url = getLogoBase64();
+  const templateVars = { ...vars, logo_url };
   if (!tpl) {
     // Fallback minimal template (snow-blue theme)
     return `
@@ -36,7 +53,7 @@ function renderTicketTemplate(vars = {}) {
     `;
   }
 
-  return tpl.replace(/\{\{(\w+)\}\}/g, (m, key) => (vars[key] !== undefined && vars[key] !== null ? vars[key] : ''));
+  return tpl.replace(/\{\{(\w+)\}\}/g, (m, key) => (templateVars[key] !== undefined && templateVars[key] !== null ? templateVars[key] : ''));
 }
 
 function absoluteFromUrlPath(urlPath) {

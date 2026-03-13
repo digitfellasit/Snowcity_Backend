@@ -179,7 +179,7 @@ async function drawConsolidatedTicket(doc, data) {
   doc.font('Helvetica-Bold').fontSize(20).fillColor(C.navy)
     .text(orderRef || '', rightX - 175, labelY + 11, { width: 175, align: 'right' });
   doc.font('Helvetica').fontSize(7.5).fillColor(C.lightText)
-    .text(`Booking Placed On: ${fmtDateShort(orderDate)}`, rightX - 175, labelY + 34, { width: 175, align: 'right' });
+    .text(`Booking Placed On: ${dayjs(orderDate).format('DD MMM YYYY hh:mma')}`, rightX - 175, labelY + 34, { width: 175, align: 'right' });
 
   // Thin bottom border on header
   doc.moveTo(0, headerH).lineTo(PW, headerH).strokeColor('#D0D8E8').lineWidth(1).stroke();
@@ -230,21 +230,6 @@ async function drawConsolidatedTicket(doc, data) {
   doc.fillColor(C.white).text('is ', startX + part1W, headY, { lineBreak: false, continued: false });
   doc.fillColor(C.accent).text('Confirmed!', startX + part1W + partIsW, headY, { lineBreak: false });
   doc.restore();
-
-  // Temperature badge (Snow Park specific)
-  const hasSnow = items.some(i => (i.item_title || '').toLowerCase().includes('snow'));
-  if (hasSnow) {
-    const badgeW = 72, badgeH = 48, badgeX = PW - M - badgeW, badgeY2 = bannerY + 14;
-    doc.save();
-    doc.roundedRect(badgeX, badgeY2, badgeW, badgeH, 8).fill('rgba(255,255,255,0.15)');
-    doc.roundedRect(badgeX, badgeY2, badgeW, badgeH, 8).strokeColor('rgba(255,255,255,0.3)').lineWidth(1).stroke();
-    doc.font('Helvetica-Bold').fontSize(20).fillColor(C.white)
-      .text('-7°C', badgeX, badgeY2 + 6, { width: badgeW, align: 'center' });
-    doc.font('Helvetica').fontSize(6.5).fillColor('rgba(255,255,255,0.75)')
-      .text('INDOOR SNOW', badgeX, badgeY2 + 28, { width: badgeW, align: 'center' });
-    doc.text('Real Snowfall', badgeX, badgeY2 + 37, { width: badgeW, align: 'center' });
-    doc.restore();
-  }
 
   // Scalloped bottom edge (white circles)
   doc.save();

@@ -106,16 +106,24 @@ cron.schedule('*/15 * * * *', async () => {
   try {
     console.log('Running cleanup: Abandoned Pending Orders...');
 
-    // Delete orders pending for more than 20 minutes
-    // Cascading delete will remove associated bookings and booking_addons
+    // Update orders pending for more than 30 minutes to 'Cancelled' instead of deleting
     const res = await pool.query(
-      `DELETE FROM orders 
+      `UPDATE orders 
+       SET payment_status = 'Cancelled', updated_at = NOW()
        WHERE payment_status = 'Pending' 
-       AND created_at < NOW() - INTERVAL '20 minutes'`
+       AND created_at < NOW() - INTERVAL '30 minutes'
+       RETURNING order_id`
     );
 
     if (res.rowCount > 0) {
-      console.log(`Cleanup: Removed ${res.rowCount} abandoned orders.`);
+      const orderIds = res.rows.map(r => r.order_id);
+      await pool.query(
+        `UPDATE bookings 
+         SET payment_status = 'Cancelled', booking_status = 'Cancelled', updated_at = NOW()
+         WHERE order_id = ANY($1)`,
+        [orderIds]
+      );
+      console.log(`Cleanup: Cancelled ${res.rowCount} abandoned orders.`);
     }
   } catch (err) {
     console.error('Cleanup Error:', err);
