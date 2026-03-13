@@ -905,14 +905,15 @@ async function checkPayPhiStatus(orderIdOrRef) {
 
   // ── SUCCESS: update DB to Completed + CONFIRMED ──
   if (success && order.payment_status !== 'Completed') {
-    const txnId = raw?.transactionId || raw?.txnId || raw?.txnID || raw?.transactionValue ||
-      raw?.merchantTxnNo || raw?.data?.transactionId || raw?.response?.transactionId ||
-      order.payment_ref || merchantTxnNo;
+    const payphiTxnID = raw?.txnID || raw?.txnId || raw?.transactionId || raw?.transactionValue ||
+      raw?.data?.transactionId || raw?.response?.transactionId || null;
+    const finalMerchantTxnNo = raw?.merchantTxnNo || merchantTxnNo;
 
     console.log('🔍 DEBUG PayPhi Updating Payment Status:', {
       orderRef: order.order_ref,
       orderId: order.order_id,
-      txnId,
+      payphiTxnID,
+      finalMerchantTxnNo,
       status: 'Completed'
     });
 
@@ -924,14 +925,14 @@ async function checkPayPhiStatus(orderIdOrRef) {
 
       // Update Order
       await client.query(
-        `UPDATE orders SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PayPhi', payment_method = $2, payment_datetime = $3, updated_at = NOW() WHERE order_id = $4`,
-        [txnId, paymentMethod, paymentDateTime, order.order_id]
+        `UPDATE orders SET payment_status = 'Completed', payment_ref = $1, payment_txn_no = $2, payment_mode = 'PayPhi', payment_method = $3, payment_datetime = $4, updated_at = NOW() WHERE order_id = $5`,
+        [finalMerchantTxnNo, payphiTxnID, paymentMethod, paymentDateTime, order.order_id]
       );
 
       // Update Bookings
       await client.query(
-        `UPDATE bookings SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PayPhi', payment_method = $2, payment_datetime = $3, booking_status = 'CONFIRMED', updated_at = NOW() WHERE order_id = $4`,
-        [txnId, paymentMethod, paymentDateTime, order.order_id]
+        `UPDATE bookings SET payment_status = 'Completed', payment_ref = $1, payment_txn_no = $2, payment_mode = 'PayPhi', payment_method = $3, payment_datetime = $4, booking_status = 'CONFIRMED', updated_at = NOW() WHERE order_id = $5`,
+        [finalMerchantTxnNo, payphiTxnID, paymentMethod, paymentDateTime, order.order_id]
       );
     });
 
@@ -968,18 +969,20 @@ async function checkPayPhiStatus(orderIdOrRef) {
     return { success: true, status: 'COMPLETED', response: raw };
   }
 
-  // ── EXPLICIT FAILURE: update DB to Failed ──
+  // ── EXPLICIT FAILURE: keep as Pending, let cron handle Failed status ──
   if (isExplicitFail && order.payment_status !== 'Failed') {
-    const txnId = raw?.transactionId || raw?.txnId || raw?.txnID || raw?.transactionValue ||
-      raw?.merchantTxnNo || raw?.data?.transactionId || raw?.response?.transactionId ||
-      order.payment_ref || merchantTxnNo;
+    /*
+    const payphiTxnID = raw?.txnID || raw?.txnId || raw?.transactionId || raw?.transactionValue ||
+      raw?.data?.transactionId || raw?.response?.transactionId || null;
+    const finalMerchantTxnNo = raw?.merchantTxnNo || merchantTxnNo;
 
     console.log('🔍 DEBUG PayPhi Payment FAILED:', {
       orderRef: order.order_ref,
       orderId: order.order_id,
       rawCode,
       rawStatus,
-      txnId
+      payphiTxnID,
+      finalMerchantTxnNo
     });
 
     await withTransaction(async (client) => {
@@ -988,16 +991,17 @@ async function checkPayPhiStatus(orderIdOrRef) {
 
       // Update Order — payment_status='Failed' is valid enum value
       await client.query(
-        `UPDATE orders SET payment_status = 'Failed', payment_ref = $1, payment_mode = 'PayPhi', payment_method = $2, payment_datetime = $3, updated_at = NOW() WHERE order_id = $4`,
-        [txnId, paymentMethod, paymentDateTime, order.order_id]
+        `UPDATE orders SET payment_status = 'Failed', payment_ref = $1, payment_txn_no = $2, payment_mode = 'PayPhi', payment_method = $3, payment_datetime = $4, updated_at = NOW() WHERE order_id = $5`,
+        [finalMerchantTxnNo, payphiTxnID, paymentMethod, paymentDateTime, order.order_id]
       );
 
       // Update Bookings — payment_status='Failed', booking_status stays 'PENDING_PAYMENT'
       await client.query(
-        `UPDATE bookings SET payment_status = 'Failed', payment_ref = $1, payment_mode = 'PayPhi', payment_method = $2, payment_datetime = $3, updated_at = NOW() WHERE order_id = $4`,
-        [txnId, paymentMethod, paymentDateTime, order.order_id]
+        `UPDATE bookings SET payment_status = 'Failed', payment_ref = $1, payment_txn_no = $2, payment_mode = 'PayPhi', payment_method = $3, payment_datetime = $4, updated_at = NOW() WHERE order_id = $5`,
+        [finalMerchantTxnNo, payphiTxnID, paymentMethod, paymentDateTime, order.order_id]
       );
     });
+    */
 
     return { success: false, status: 'FAILED', response: raw };
   }
@@ -1067,10 +1071,9 @@ async function initiatePhonePePayment({ bookingId, email, mobile, amount: fronte
   }
 
   if (merchantTransactionId) {
-    const phonePeOrderId = result?.raw?.phonePeOrderId || merchantTransactionId;
     await pool.query(
-      `UPDATE orders SET payment_ref = $1, payment_txn_no = $2, payment_mode = 'PhonePe' WHERE order_id = $3`,
-      [phonePeOrderId, merchantTransactionId, orderId]
+      `UPDATE orders SET payment_ref = $1, payment_txn_no = NULL, payment_mode = 'PhonePe' WHERE order_id = $2`,
+      [merchantTransactionId, orderId]
     );
   }
 
@@ -1122,7 +1125,11 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
 
   // ── SUCCESS: update DB to Completed + CONFIRMED ──
   if (success && order.payment_status !== 'Completed') {
-    const txnId = raw?.transactionId || merchantTxnNo;
+    const phonePeTxnID = raw?.transactionId || 
+      raw?.paymentDetails?.[0]?.transactionId || 
+      raw?.fullResponse?.paymentDetails?.[0]?.transactionId || 
+      merchantTxnNo;
+    const finalMerchantTxnNo = raw?.merchantTransactionId || merchantTxnNo;
 
     await withTransaction(async (client) => {
       // Extract payment method from PhonePe response (e.g. UPI, CARD, NETBANKING)
@@ -1137,14 +1144,14 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
 
       // Update Order
       await client.query(
-        `UPDATE orders SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PhonePe', payment_method = $2, payment_datetime = $3, updated_at = NOW() WHERE order_id = $4`,
-        [txnId, paymentMethod, paymentDateTime, order.order_id]
+        `UPDATE orders SET payment_status = 'Completed', payment_ref = $1, payment_txn_no = $2, payment_mode = 'PhonePe', payment_method = $3, payment_datetime = $4, updated_at = NOW() WHERE order_id = $5`,
+        [finalMerchantTxnNo, phonePeTxnID, paymentMethod, paymentDateTime, order.order_id]
       );
 
       // Update Bookings
       await client.query(
-        `UPDATE bookings SET payment_status = 'Completed', payment_ref = $1, payment_mode = 'PhonePe', payment_method = $2, payment_datetime = $3, booking_status = 'CONFIRMED', updated_at = NOW() WHERE order_id = $4`,
-        [txnId, paymentMethod, paymentDateTime, order.order_id]
+        `UPDATE bookings SET payment_status = 'Completed', payment_ref = $1, payment_txn_no = $2, payment_mode = 'PhonePe', payment_method = $3, payment_datetime = $4, booking_status = 'CONFIRMED', updated_at = NOW() WHERE order_id = $5`,
+        [finalMerchantTxnNo, phonePeTxnID, paymentMethod, paymentDateTime, order.order_id]
       );
     });
 
@@ -1181,10 +1188,16 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
     return { success: true, status: 'COMPLETED', response: raw };
   }
 
-  // ── EXPLICIT FAILURE: update DB to Failed ──
+  // ── EXPLICIT FAILURE: keep as Pending, let cron handle Failed status ──
   if (isExplicitFail && order.payment_status !== 'Failed') {
-    const txnId = raw?.transactionId || merchantTxnNo;
-    console.log('🔍 DEBUG PhonePe Payment FAILED:', { orderId: order.order_id, rawState, txnId });
+    /*
+    const phonePeTxnID = raw?.transactionId || 
+      raw?.paymentDetails?.[0]?.transactionId || 
+      raw?.fullResponse?.paymentDetails?.[0]?.transactionId || 
+      merchantTxnNo;
+    const finalMerchantTxnNo = raw?.merchantTransactionId || merchantTxnNo;
+
+    console.log('🔍 DEBUG PhonePe Payment FAILED:', { orderId: order.order_id, rawState, phonePeTxnID, finalMerchantTxnNo });
 
     await withTransaction(async (client) => {
       const paymentMethod = raw?.paymentInstrument?.type || raw?.paymentDetails?.[0]?.paymentMode || raw?.fullResponse?.paymentDetails?.[0]?.paymentMode || null;
@@ -1196,16 +1209,17 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
 
       // Update Order — payment_status='Failed' is valid enum value
       await client.query(
-        `UPDATE orders SET payment_status = 'Failed', payment_ref = $1, payment_mode = 'PhonePe', payment_method = $2, payment_datetime = $3, updated_at = NOW() WHERE order_id = $4`,
-        [txnId, paymentMethod, paymentDateTime, order.order_id]
+        `UPDATE orders SET payment_status = 'Failed', payment_ref = $1, payment_txn_no = $2, payment_mode = 'PhonePe', payment_method = $3, payment_datetime = $4, updated_at = NOW() WHERE order_id = $5`,
+        [finalMerchantTxnNo, phonePeTxnID, paymentMethod, paymentDateTime, order.order_id]
       );
 
       // Update Bookings — payment_status='Failed', booking_status stays 'PENDING_PAYMENT'
       await client.query(
-        `UPDATE bookings SET payment_status = 'Failed', payment_ref = $1, payment_mode = 'PhonePe', payment_method = $2, payment_datetime = $3, updated_at = NOW() WHERE order_id = $4`,
-        [txnId, paymentMethod, paymentDateTime, order.order_id]
+        `UPDATE bookings SET payment_status = 'Failed', payment_ref = $1, payment_txn_no = $2, payment_mode = 'PhonePe', payment_method = $3, payment_datetime = $4, updated_at = NOW() WHERE order_id = $5`,
+        [finalMerchantTxnNo, phonePeTxnID, paymentMethod, paymentDateTime, order.order_id]
       );
     });
+    */
 
     return { success: false, status: 'FAILED', response: raw };
   }

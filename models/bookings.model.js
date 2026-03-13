@@ -8,6 +8,7 @@ function mapBooking(row) {
     booking_id: row.booking_id,
     booking_ref: row.booking_ref,
     order_id: row.order_id || null, // Link to parent order
+    order_ref: row.parent_order_ref || null, // EXPLICIT real order_ref
     parent_booking_id: row.parent_booking_id || null,
     user_id: row.user_id,
 
@@ -140,12 +141,14 @@ async function getBaseSqlParts() {
         CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_discount_type ELSE NULL END AS offer_get_discount_type,
         CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_discount_value ELSE NULL END AS offer_get_discount_value,
 
-        -- Timing configs
         a.time_slot_enabled,
-        c.create_slots
+        c.create_slots,
+        -- Force pulling the true parent order ref
+        ord.order_ref AS parent_order_ref
     `;
 
   const joins = `
+        LEFT JOIN orders ord          ON ord.order_id      = b.order_id
         LEFT JOIN attractions a       ON a.attraction_id   = b.attraction_id
         LEFT JOIN combos      c       ON c.combo_id        = b.combo_id
         LEFT JOIN attractions a1c     ON a1c.attraction_id = c.attraction_1_id
@@ -568,7 +571,7 @@ async function updatePaymentStatus(order_id, status, ref = null) {
 async function cancelOrder(order_id) {
   return withTransaction(async (client) => {
     const res = await client.query(
-      `UPDATE orders SET payment_status = 'Cancelled', updated_at = NOW() WHERE order_id = $1 RETURNING *`,
+      `UPDATE orders SET payment_status = 'Failed', updated_at = NOW() WHERE order_id = $1 RETURNING *`,
       [order_id]
     );
     await client.query(

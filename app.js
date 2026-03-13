@@ -100,30 +100,55 @@ app.use((err, req, res, next) => {
 
 const cron = require('node-cron');
 const { pool } = require('./config/db');
+const bookingService = require('./services/bookingService');
 
 // Run every 15 minutes
 cron.schedule('*/15 * * * *', async () => {
   try {
-    console.log('Running cleanup: Abandoned Pending Orders...');
+    console.log('Running cleanup: Verifying Pending Orders with Gateways...');
 
-    // Update orders pending for more than 30 minutes to 'Cancelled' instead of deleting
-    const res = await pool.query(
-      `UPDATE orders 
-       SET payment_status = 'Cancelled', updated_at = NOW()
+    // 1. Fetch orders pending for more than 30 minutes
+    const pendingOrdersRes = await pool.query(
+      `SELECT order_id, order_ref, payment_mode, payment_status 
+       FROM orders 
        WHERE payment_status = 'Pending' 
-       AND created_at < NOW() - INTERVAL '30 minutes'
-       RETURNING order_id`
+       AND created_at < NOW() - INTERVAL '30 minutes'`
     );
 
-    if (res.rowCount > 0) {
-      const orderIds = res.rows.map(r => r.order_id);
-      await pool.query(
-        `UPDATE bookings 
-         SET payment_status = 'Cancelled', booking_status = 'Cancelled', updated_at = NOW()
-         WHERE order_id = ANY($1)`,
-        [orderIds]
+    if (pendingOrdersRes.rowCount > 0) {
+      console.log(`Checking status for ${pendingOrdersRes.rowCount} pending orders...`);
+      
+      for (const order of pendingOrdersRes.rows) {
+        try {
+          if (order.payment_mode === 'PayPhi') {
+            await bookingService.checkPayPhiStatus(order.order_id);
+          } else if (order.payment_mode === 'PhonePe') {
+            await bookingService.checkPhonePeStatus(order.order_id);
+          }
+        } catch (err) {
+          console.error(`Status check failed for order ${order.order_id}:`, err.message);
+        }
+      }
+
+      // 2. After individual status checks, transition any still 'Pending' to 'Failed'
+      const finalRes = await pool.query(
+        `UPDATE orders 
+         SET payment_status = 'Failed', updated_at = NOW()
+         WHERE payment_status = 'Pending' 
+         AND created_at < NOW() - INTERVAL '30 minutes'
+         RETURNING order_id`
       );
-      console.log(`Cleanup: Cancelled ${res.rowCount} abandoned orders.`);
+
+      if (finalRes.rowCount > 0) {
+        const orderIds = finalRes.rows.map(r => r.order_id);
+        await pool.query(
+          `UPDATE bookings 
+           SET payment_status = 'Failed', booking_status = 'Cancelled', updated_at = NOW()
+           WHERE order_id = ANY($1)`,
+          [orderIds]
+        );
+        console.log(`Cleanup: Marked ${finalRes.rowCount} confirmed abandoned orders as Failed.`);
+      }
     }
   } catch (err) {
     console.error('Cleanup Error:', err);
