@@ -969,9 +969,8 @@ async function checkPayPhiStatus(orderIdOrRef) {
     return { success: true, status: 'COMPLETED', response: raw };
   }
 
-  // ── EXPLICIT FAILURE: keep as Pending, let cron handle Failed status ──
+  // ── EXPLICIT FAILURE: Update DB to Failed & Cancelled ──
   if (isExplicitFail && order.payment_status !== 'Failed') {
-    /*
     const payphiTxnID = raw?.txnID || raw?.txnId || raw?.transactionId || raw?.transactionValue ||
       raw?.data?.transactionId || raw?.response?.transactionId || null;
     const finalMerchantTxnNo = raw?.merchantTxnNo || merchantTxnNo;
@@ -989,19 +988,18 @@ async function checkPayPhiStatus(orderIdOrRef) {
       const paymentMethod = raw?.paymentMode || raw?.paymentType || raw?.payType || null;
       const paymentDateTime = raw?.paymentDateTime || raw?.txnDate || raw?.txnDateTime || null;
 
-      // Update Order — payment_status='Failed' is valid enum value
+      // Update Order
       await client.query(
         `UPDATE orders SET payment_status = 'Failed', payment_ref = $1, payment_txn_no = $2, payment_mode = 'PayPhi', payment_method = $3, payment_datetime = $4, updated_at = NOW() WHERE order_id = $5`,
         [finalMerchantTxnNo, payphiTxnID, paymentMethod, paymentDateTime, order.order_id]
       );
 
-      // Update Bookings — payment_status='Failed', booking_status stays 'PENDING_PAYMENT'
+      // Update Bookings — mark as Cancelled
       await client.query(
-        `UPDATE bookings SET payment_status = 'Failed', payment_ref = $1, payment_txn_no = $2, payment_mode = 'PayPhi', payment_method = $3, payment_datetime = $4, updated_at = NOW() WHERE order_id = $5`,
+        `UPDATE bookings SET payment_status = 'Failed', booking_status = 'Cancelled', payment_ref = $1, payment_txn_no = $2, payment_mode = 'PayPhi', payment_method = $3, payment_datetime = $4, updated_at = NOW() WHERE order_id = $5`,
         [finalMerchantTxnNo, payphiTxnID, paymentMethod, paymentDateTime, order.order_id]
       );
     });
-    */
 
     return { success: false, status: 'FAILED', response: raw };
   }
@@ -1188,9 +1186,8 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
     return { success: true, status: 'COMPLETED', response: raw };
   }
 
-  // ── EXPLICIT FAILURE: keep as Pending, let cron handle Failed status ──
+  // ── EXPLICIT FAILURE: Update DB to Failed & Cancelled ──
   if (isExplicitFail && order.payment_status !== 'Failed') {
-    /*
     const phonePeTxnID = raw?.transactionId || 
       raw?.paymentDetails?.[0]?.transactionId || 
       raw?.fullResponse?.paymentDetails?.[0]?.transactionId || 
@@ -1207,19 +1204,18 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
       const ts = raw?.paymentDetails?.[0]?.timestamp || raw?.fullResponse?.paymentDetails?.[0]?.timestamp || raw?.completedAt;
       const paymentDateTime = ts ? new Date(ts).toISOString().replace(/[-T:Z]/g, '').slice(0, 14) : defaultDateTime;
 
-      // Update Order — payment_status='Failed' is valid enum value
+      // Update Order
       await client.query(
         `UPDATE orders SET payment_status = 'Failed', payment_ref = $1, payment_txn_no = $2, payment_mode = 'PhonePe', payment_method = $3, payment_datetime = $4, updated_at = NOW() WHERE order_id = $5`,
         [finalMerchantTxnNo, phonePeTxnID, paymentMethod, paymentDateTime, order.order_id]
       );
 
-      // Update Bookings — payment_status='Failed', booking_status stays 'PENDING_PAYMENT'
+      // Update Bookings — mark as Cancelled
       await client.query(
-        `UPDATE bookings SET payment_status = 'Failed', payment_ref = $1, payment_txn_no = $2, payment_mode = 'PhonePe', payment_method = $3, payment_datetime = $4, updated_at = NOW() WHERE order_id = $5`,
+        `UPDATE bookings SET payment_status = 'Failed', booking_status = 'Cancelled', payment_ref = $1, payment_txn_no = $2, payment_mode = 'PhonePe', payment_method = $3, payment_datetime = $4, updated_at = NOW() WHERE order_id = $5`,
         [finalMerchantTxnNo, phonePeTxnID, paymentMethod, paymentDateTime, order.order_id]
       );
     });
-    */
 
     return { success: false, status: 'FAILED', response: raw };
   }
