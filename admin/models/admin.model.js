@@ -736,7 +736,7 @@ async function getOpsDashboardStats({ from, to }) {
   // Transaction breakdown by attraction (visit date based)
   const txnAttractionSql = `
     WITH all_txn AS (
-      SELECT b.quantity, COALESCE(b.final_amount, b.total_amount, 0) AS value, a.title
+      SELECT b.booking_id, NULL::bigint AS parent_booking_id, b.quantity, COALESCE(b.final_amount, b.total_amount, 0) AS value, a.title
       FROM bookings b
       JOIN attractions a ON a.attraction_id = b.attraction_id
       WHERE b.booking_status <> 'Cancelled'
@@ -745,7 +745,7 @@ async function getOpsDashboardStats({ from, to }) {
         AND b.item_type = 'Attraction'
         AND b.booking_date ${dateCond}
       UNION ALL
-      SELECT b.quantity, COALESCE(b.final_amount, b.total_amount, 0) AS value, a.title
+      SELECT b.booking_id, b.parent_booking_id, b.quantity, COALESCE(b.final_amount, b.total_amount, 0) AS value, a.title
       FROM bookings b
       JOIN attractions a ON a.attraction_id = b.attraction_id
       WHERE b.booking_status <> 'Cancelled'
@@ -755,7 +755,7 @@ async function getOpsDashboardStats({ from, to }) {
     )
     SELECT
       title,
-      COUNT(*) AS bookings,
+      COUNT(DISTINCT COALESCE(parent_booking_id, booking_id)) AS bookings,
       COALESCE(SUM(quantity), 0) AS guests,
       COALESCE(SUM(value), 0) AS value
     FROM all_txn
@@ -978,7 +978,7 @@ async function getTransactionReport({ from, to, type = 'both' }) {
       nett: Number(r.nett),
     })),
     summary: {
-      totalRecords: rows.length,
+      totalRecords: new Set(rows.map(r => r.order_ref || r.booking_id)).size,
       totalQty,
       totalGross: Math.round(totalGross),
       totalDiscount: Math.round(totalDisc),

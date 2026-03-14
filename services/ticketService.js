@@ -2,6 +2,8 @@
 
 const PDFDocument = require('pdfkit');
 const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+dayjs.extend(utc);
 const path = require('path');
 const fs = require('fs');
 
@@ -179,7 +181,7 @@ async function drawConsolidatedTicket(doc, data) {
   doc.font('Helvetica-Bold').fontSize(20).fillColor(C.navy)
     .text(orderRef || '', rightX - 175, labelY + 11, { width: 175, align: 'right' });
   doc.font('Helvetica').fontSize(7.5).fillColor(C.lightText)
-    .text(`Booking Placed On: ${dayjs(orderDate).format('DD MMM YYYY hh:mma')}`, rightX - 175, labelY + 34, { width: 175, align: 'right' });
+    .text(`Booking Placed On: ${dayjs.utc(orderDate).utcOffset(330).format('DD MMM YYYY hh:mma')}`, rightX - 175, labelY + 34, { width: 175, align: 'right' });
 
   // Thin bottom border on header
   doc.moveTo(0, headerH).lineTo(PW, headerH).strokeColor('#D0D8E8').lineWidth(1).stroke();
@@ -276,7 +278,7 @@ async function drawConsolidatedTicket(doc, data) {
     const isSnowPark = (title || '').toLowerCase().includes('snow');
 
     // Estimate card height
-    let cardH = 108;
+    let cardH = 126;
     if (hasAddons) cardH += 14 + item.addons.length * 14;
     if (isSnowPark) cardH += 24; // extra row for tips pills
 
@@ -336,6 +338,17 @@ async function drawConsolidatedTicket(doc, data) {
 
     let nextY = infoY + 32;
 
+    // ── Line-item price ─────────────────────────────────────────────
+    const itemTotal = Number(item.final_amount || item.total_amount || 0);
+    const unitPrice = qty > 0 ? Math.round(itemTotal / qty) : itemTotal;
+    doc.font('Helvetica-Bold').fontSize(7).fillColor(C.veryLight)
+      .text('TICKET PRICE', cx, nextY);
+    nextY += 11;
+    const ticketPriceStr = `${qty} × ${money(unitPrice)}`;
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(C.paidGreen)
+      .text(ticketPriceStr, cx, nextY);
+    nextY += 16;
+
     // ── Add-ons ──────────────────────────────────────────────────
     if (hasAddons) {
       doc.font('Helvetica-Bold').fontSize(7).fillColor(C.veryLight)
@@ -373,20 +386,26 @@ async function drawConsolidatedTicket(doc, data) {
   // ═══════════════════════════════════════════════════════════════
   // 5.  TOTAL AMOUNT PAID
   // ═══════════════════════════════════════════════════════════════
-  if (y > PH - 160) { doc.addPage(); y = M; }
+  const receiptH = 50;
+  if (y + receiptH > PH - 100) { doc.addPage(); y = M; }
 
-  // Subtle divider
-  doc.moveTo(M, y).lineTo(PW - M, y).strokeColor(C.cardBorder).lineWidth(0.75).stroke();
-  y += 16;
+  const boxX = M;
+  const boxW = PW - M * 2;
 
-  doc.font('Helvetica').fontSize(7.5).fillColor(C.veryLight)
-    .text('TOTAL AMOUNT PAID', M, y);
+  // Box background & border
+  doc.roundedRect(boxX, y, boxW, receiptH, 8).fill('#FFFBF0');
+  doc.roundedRect(boxX, y, boxW, receiptH, 8)
+     .strokeColor('#E8D5A0').lineWidth(0.75).stroke();
 
-  const totalY = y + 12;
-  doc.font('Helvetica-Bold').fontSize(26).fillColor('#C47F00')
-    .text(money(totalAmount), M, totalY);
+  const rx = boxX + 14;
+  const rw = boxW - 28;
 
-  // Payment status badge
+  doc.font('Helvetica-Bold').fontSize(8).fillColor(C.veryLight)
+    .text('TOTAL PAID', rx, y + 10);
+  doc.font('Helvetica-Bold').fontSize(20).fillColor(C.paidGreen)
+    .text(money(totalAmount), rx, y + 22);
+
+  y += receiptH + 16;
   
   // ═══════════════════════════════════════════════════════════════
   // 6.  KNOW BEFORE YOU GO

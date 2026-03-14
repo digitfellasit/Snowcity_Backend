@@ -7,6 +7,69 @@ const createHttpClient = require('../config/axios');
 
 const isTrue = (v) => ['1', 'true', 'yes', 'on'].includes(String(v || '').toLowerCase());
 
+// ── Helper: fetch order data for GTM enrichment ───────────────────
+async function getOrderGtmData(orderId) {
+  try {
+    const orderRes = await pool.query(
+      `SELECT order_id, order_ref, total_amount, discount_amount, final_amount, coupon_code, payment_mode
+       FROM orders WHERE order_id = $1`,
+      [orderId]
+    );
+    const order = orderRes.rows[0];
+    if (!order) return {};
+
+    const bookingsRes = await pool.query(
+      `SELECT b.booking_id, b.item_type, b.quantity, b.total_amount, b.final_amount, b.booking_date,
+              b.slot_label, b.parent_booking_id,
+              COALESCE(a.title, c.name, 'Booking') AS item_title
+       FROM bookings b
+       LEFT JOIN attractions a ON a.attraction_id = b.attraction_id
+       LEFT JOIN combos c ON c.combo_id = b.combo_id
+       WHERE b.order_id = $1 AND b.parent_booking_id IS NULL
+       ORDER BY b.booking_id ASC`,
+      [orderId]
+    );
+
+    let addonsTotal = 0;
+    const items = [];
+    let totalTickets = 0;
+    for (const b of bookingsRes.rows) {
+      totalTickets += Number(b.quantity || 1);
+      const addonsRes = await pool.query(
+        `SELECT ba.quantity, ba.price, ad.title
+         FROM booking_addons ba JOIN addons ad ON ad.addon_id = ba.addon_id
+         WHERE ba.booking_id = $1`,
+        [b.booking_id]
+      );
+      let itemAddons = 0;
+      for (const a of addonsRes.rows) itemAddons += Number(a.price || 0) * Number(a.quantity || 1);
+      addonsTotal += itemAddons;
+
+      items.push({
+        title: b.item_title,
+        type: b.item_type === 'Combo' ? 'combo' : 'single',
+        quantity: Number(b.quantity || 1),
+        pricePerTicket: Number(b.quantity) > 0 ? Math.round(Number(b.total_amount || 0) / Number(b.quantity)) : 0,
+        timeSlot: b.slot_label || '',
+        date: b.booking_date || '',
+      });
+    }
+
+    return {
+      totalPaid: Number(order.final_amount ?? order.total_amount ?? 0),
+      totalTickets,
+      addonsValue: addonsTotal,
+      discountValue: Number(order.discount_amount || 0),
+      promoCode: order.coupon_code || '',
+      paymentMode: order.payment_mode || '',
+      items,
+    };
+  } catch (err) {
+    console.error('[getOrderGtmData] Error:', err.message);
+    return {};
+  }
+}
+
 async function shallowPing(baseURL) {
   try {
     const http = createHttpClient({ baseURL, timeout: 4000 });
@@ -141,6 +204,7 @@ router.get('/payphi/status/txn/:txnId', async (req, res) => {
         [order.order_id]
       );
       const firstBooking = bookingRes.rows[0];
+      const gtm = await getOrderGtmData(order.order_id);
       return res.json({
         success: true,
         alreadyPaid: true,
@@ -149,6 +213,7 @@ router.get('/payphi/status/txn/:txnId', async (req, res) => {
         orderRef: order.order_ref,
         bookingId: firstBooking?.booking_id || null,
         ticketUrl: firstBooking?.ticket_pdf || null,
+        ...gtm,
       });
     }
 
@@ -166,6 +231,7 @@ router.get('/payphi/status/txn/:txnId', async (req, res) => {
     const paid = statusResult.success;
     if (!paid) {
       const status = statusResult.status || 'PENDING';
+      const gtm = await getOrderGtmData(order.order_id);
       return res.json({
         success: false,
         status,
@@ -174,6 +240,7 @@ router.get('/payphi/status/txn/:txnId', async (req, res) => {
         message: status === 'FAILED'
           ? 'Payment failed or was declined. Please try again.'
           : 'Payment not yet completed',
+        ...gtm,
       });
     }
 
@@ -185,6 +252,7 @@ router.get('/payphi/status/txn/:txnId', async (req, res) => {
     );
     const firstBooking = bookingRes.rows[0];
 
+    const gtm = await getOrderGtmData(order.order_id);
     return res.json({
       success: true,
       status: 'COMPLETED',
@@ -192,6 +260,7 @@ router.get('/payphi/status/txn/:txnId', async (req, res) => {
       orderRef: order.order_ref,
       bookingId: firstBooking?.booking_id || null,
       ticketUrl: firstBooking?.ticket_pdf || null,
+      ...gtm,
     });
 
   } catch (err) {

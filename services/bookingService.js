@@ -136,7 +136,7 @@ const buildComboAttractions = (combo = {}) => {
   return entries.sort((a, b) => a.position - b.position);
 };
 
-async function createComboChildBookings({ client, comboBooking, comboDetails, baseItem, orderId, userId }) {
+async function createComboChildBookings({ client, comboBooking, comboDetails, baseItem, orderId, userId, dynamicChildPrices }) {
   const combo = comboDetails || (comboBooking?.combo_id ? await combosModel.getComboById(comboBooking.combo_id) : null);
   if (!combo) return;
   const attractions = buildComboAttractions(combo);
@@ -151,20 +151,23 @@ async function createComboChildBookings({ client, comboBooking, comboDetails, ba
   const ticketQuantity = Math.max(1, Number(quantity || 1));
   const parentTotal = toNumber(comboBooking.total_amount, 0);
 
-  attractions.forEach((entry, idx) => {
-    if (!entry?.attraction_id) return;
-  });
+  // Build a map of dynamic child prices if available
+  const childPriceMap = dynamicChildPrices && typeof dynamicChildPrices === 'object' ? dynamicChildPrices : {};
 
   for (let idx = 0; idx < attractions.length; idx++) {
     const entry = attractions[idx];
     const targetId = entry?.attraction_id;
     if (!targetId) continue;
 
+    // Prefer dynamic child price over static combo price
+    const dynamicPrice = toNumber(childPriceMap[String(targetId)], null);
     const explicitPrice = entry.price;
     const fallbackPerTicket = quantity > 0 && attractions.length > 0
       ? parentTotal / attractions.length / quantity
       : 0;
-    const unitPrice = toNumber(explicitPrice, 0) || Math.max(0, fallbackPerTicket);
+    const unitPrice = dynamicPrice != null && dynamicPrice > 0
+      ? dynamicPrice
+      : (toNumber(explicitPrice, 0) || Math.max(0, fallbackPerTicket));
     const totalAmount = unitPrice * ticketQuantity;
     const discountAmount = 0;
     const times = segmentTimes[idx] || {};
@@ -781,6 +784,12 @@ async function createBookings(payload) {
       bookings.push(booking);
 
       if (isCombo) {
+        // Extract dynamic child_price_adjustments from applied rules if available
+        let dynamicChildPrices = null;
+        if (pItem.offer?.applied_rules) {
+          const childRule = pItem.offer.applied_rules.find(r => r.childPriceAdjustments);
+          if (childRule) dynamicChildPrices = childRule.childPriceAdjustments;
+        }
         await createComboChildBookings({
           client,
           comboBooking: booking,
@@ -788,6 +797,7 @@ async function createBookings(payload) {
           baseItem: pItem,
           orderId,
           userId,
+          dynamicChildPrices,
         });
       }
     }
