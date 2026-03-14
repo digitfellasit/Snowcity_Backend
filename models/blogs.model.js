@@ -179,7 +179,7 @@ async function listBlogs({ active = null, q = '', limit = 50, offset = 0, blogId
   const { rows } = await pool.query(
     `SELECT *, COUNT(*) OVER() as total_count FROM blogs
      ${whereSql}
-     ORDER BY created_at ASC
+     ORDER BY created_at DESC
      LIMIT $${i} OFFSET $${i + 1}`,
     [...params, limit, offset]
   );

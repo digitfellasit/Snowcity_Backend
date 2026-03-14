@@ -38,10 +38,15 @@ router.get('/pages', async (req, res, next) => {
     if (group) { where.push('LOWER(p.nav_group) = LOWER($1)'); params.push(group); }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const { rows } = await pool.query(
-      `SELECT page_id, title, slug, nav_order, nav_group
+      `SELECT
+         p.page_id, p.title, p.slug, p.active,
+         p.content, p.nav_group, p.nav_order,
+         p.placement, p.placement_ref_id,
+         p.section_type, p.section_ref_id,
+         p.created_at, p.updated_at
        FROM cms_pages p
        ${whereSql}
-       ORDER BY nav_order ASC, LOWER(title) ASC`,
+       ORDER BY p.nav_order ASC, LOWER(p.title) ASC`,
       params
     );
     res.json(rows);

@@ -129,7 +129,7 @@ async function createPage({
        RETURNING *`,
       [
         title,
-        slug,
+        slug || null,
         content,
         hero,
         meta_title,

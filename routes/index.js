@@ -29,7 +29,6 @@ router.use('/tickets', require('./ticketsvirtual.routes'));
 router.use('/', require('./gallery.public'));
 router.use('/', require('./pages.public'));
 router.use('/contact', require('./contact.routes'));
-router.use('/track', require('./tracking.routes'));
 router.use('/site-settings', cachePublic(1800), require('./siteSettings.routes')); // 30 min
 router.use('/payments', require('./payments.routes'));
 router.use('/resolve-slug', cachePublic(300), require('./resolveSlug.routes'));     // 5 min

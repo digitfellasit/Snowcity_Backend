@@ -327,17 +327,34 @@ async function getAdminOverview({ from = null, to = null, attraction_id = null, 
 // Attractions-wise breakdown within range
 async function getAttractionBreakdown({ from = null, to = null, limit = 50 } = {}) {
   const sql = `
+    WITH all_data AS (
+      -- Standalone attraction bookings
+      SELECT b.attraction_id, b.quantity, COALESCE(b.final_amount, b.total_amount, 0) AS revenue
+      FROM bookings b
+      WHERE b.booking_status <> 'Cancelled'
+        AND b.payment_status = 'Completed'
+        AND b.parent_booking_id IS NULL
+        AND b.item_type = 'Attraction'
+        AND b.created_at >= COALESCE($1::timestamptz, NOW() - INTERVAL '30 days')
+        AND b.created_at <  COALESCE($2::timestamptz, NOW())
+      UNION ALL
+      -- Combo child bookings
+      SELECT b.attraction_id, b.quantity, COALESCE(b.final_amount, b.total_amount, 0) AS revenue
+      FROM bookings b
+      WHERE b.booking_status <> 'Cancelled'
+        AND b.payment_status = 'Completed'
+        AND b.parent_booking_id IS NOT NULL
+        AND b.created_at >= COALESCE($1::timestamptz, NOW() - INTERVAL '30 days')
+        AND b.created_at <  COALESCE($2::timestamptz, NOW())
+    )
     SELECT
       a.attraction_id,
       a.title,
-      COUNT(*) FILTER (WHERE b.payment_status = 'Completed') AS bookings,
-      COALESCE(SUM(CASE WHEN b.payment_status = 'Completed' THEN b.quantity ELSE 0 END), 0) AS people,
-      COALESCE(SUM(CASE WHEN b.payment_status = 'Completed' THEN COALESCE(b.final_amount, b.total_amount, 0) ELSE 0 END), 0) AS revenue
-    FROM bookings b
-    JOIN attractions a ON a.attraction_id = b.attraction_id
-    WHERE b.booking_status <> 'Cancelled'
-      AND b.created_at >= COALESCE($1::timestamptz, NOW() - INTERVAL '30 days')
-      AND b.created_at <  COALESCE($2::timestamptz, NOW())
+      COUNT(*)::int AS bookings,
+      COALESCE(SUM(d.quantity), 0)::int AS people,
+      COALESCE(SUM(d.revenue), 0)::float AS revenue
+    FROM all_data d
+    JOIN attractions a ON a.attraction_id = d.attraction_id
     GROUP BY a.attraction_id, a.title
     ORDER BY bookings DESC, revenue DESC
     LIMIT $3;
@@ -555,7 +572,12 @@ async function getDetailedDailyAnalytics({ from = null, to = null, attraction_id
   }
 
   try {
-    return dailyData;
+    return dailyData.map(r => ({
+      ...r,
+      bucket: r.bucket || r.booking_date,
+      people: r.people !== undefined ? r.people : r.total_people,
+      bookings: r.bookings !== undefined ? r.bookings : r.completed_bookings
+    }));
 
   } catch (error) {
     console.error('Error in getDetailedDailyAnalytics:', error);
