@@ -1,49 +1,44 @@
 require('dotenv').config();
-const dynamicPricingModel = require('./models/dynamicPricing.model');
-const dynamicPricingService = require('./services/dynamicPricingService');
-const comboService = require('./services/comboService');
+const bookingService = require('./services/bookingService');
 const { pool } = require('./config/db');
-const fs = require('fs');
 
-async function test() {
-  const out = [];
-  const log = (msg) => { out.push(msg); console.log(msg); };
+async function debug() {
   try {
-    const { rows: rules } = await pool.query('SELECT * FROM dynamic_pricing_rules WHERE active = true ORDER BY created_at DESC LIMIT 1');
-    if (!rules.length) { log('No rules'); return; }
-    const r = rules[0];
-    log(`Rule #${r.rule_id}: target=${r.target_type}/${r.target_id} mode=${r.day_selection_mode} adj=${r.price_adjustment_type}/${r.price_adjustment_value}`);
-    log(`child_price_adjustments=${JSON.stringify(r.child_price_adjustments)}`);
-    log(`date_ranges=${JSON.stringify(r.date_ranges)}`);
+    console.log('\n--- Inspecting Latest Combo Booking and its children ---');
+    const { rows: latestParent } = await pool.query(
+      'SELECT booking_id, total_amount, discount_amount, final_amount, offer_id, combo_id, created_at FROM bookings WHERE item_type = \'Combo\' ORDER BY booking_id DESC LIMIT 1'
+    );
 
-    const combo = await comboService.getById(r.target_id);
-    const bp = Number(combo?.total_price || combo?.combo_price || 0);
-    log(`combo base_price=${bp}`);
-
-    // Saturday
-    const sat = '2026-03-14';
-    const satRules = await dynamicPricingModel.getApplicableRules(r.target_type, r.target_id, sat);
-    log(`SAT applicable=${satRules.length}`);
-    if (satRules.length) {
-      log(`SAT rule child_adj=${JSON.stringify(satRules[0].child_price_adjustments)}`);
+    if (latestParent.length === 0) {
+      console.log('No combo bookings found.');
+      process.exit(0);
     }
-    const satResult = await dynamicPricingService.calculateDynamicPrice({
-      itemType: 'combo', itemId: r.target_id, basePrice: bp, date: new Date(sat), time: '12:00:00', quantity: 1
-    });
-    log(`SAT finalPrice=${satResult.finalPrice} orig=${satResult.originalPrice} rules=${satResult.appliedRules.length}`);
-    if (satResult.appliedRules.length) log(`SAT appliedRule=${JSON.stringify(satResult.appliedRules[0])}`);
 
-    // Thursday
-    const thu = '2026-03-12';
-    const thuResult = await dynamicPricingService.calculateDynamicPrice({
-      itemType: 'combo', itemId: r.target_id, basePrice: bp, date: new Date(thu), time: '12:00:00', quantity: 1
-    });
-    log(`THU finalPrice=${thuResult.finalPrice} rules=${thuResult.appliedRules.length}`);
-  } catch (e) {
-    log(`ERROR: ${e.message}\n${e.stack}`);
-  } finally {
-    fs.writeFileSync('_debug_output.txt', out.join('\n'));
-    await pool.end();
+    const parent = latestParent[0];
+    console.log('Parent Booking:', JSON.stringify(parent, null, 2));
+
+    const { rows: children } = await pool.query(
+      'SELECT booking_id, parent_booking_id, attraction_id, total_amount, quantity FROM bookings WHERE parent_booking_id = $1',
+      [parent.booking_id]
+    );
+    console.log('Child Bookings:', JSON.stringify(children, null, 2));
+
+    if (parent.offer_id) {
+      const { rows: ruleInfo } = await pool.query(
+        'SELECT rule_id, name, child_price_adjustments FROM dynamic_pricing_rules WHERE rule_id = $1',
+        [parent.offer_id]
+      );
+      console.log('\n--- Rule associated with booking ---');
+      console.log(JSON.stringify(ruleInfo, null, 2));
+    } else {
+      console.log('\nNo offer_id associated with this booking.');
+    }
+
+    process.exit(0);
+  } catch (err) {
+    console.error(err);
+    process.exit(1);
   }
 }
-test();
+
+debug();

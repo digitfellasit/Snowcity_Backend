@@ -12,49 +12,56 @@ function sanitizeGranularity(granularity) {
 async function getDashboardSummary({ from = null, to = null, attraction_id = null } = {}) {
   const sql = `
     SELECT
+      -- 1. Bookings: Count parents if unfiltered, count attraction visits if filtered.
       COUNT(*) FILTER (
-        WHERE b.parent_booking_id IS NULL
-          AND b.payment_status = 'Completed'
+        WHERE b.payment_status = 'Completed'
+          AND (($3::bigint IS NULL AND b.parent_booking_id IS NULL) OR ($3::bigint IS NOT NULL))
       ) AS total_bookings,
 
       COUNT(*) FILTER (
-        WHERE b.parent_booking_id IS NULL
-          AND b.payment_status <> 'Completed'
+        WHERE b.payment_status <> 'Completed'
+          AND (($3::bigint IS NULL AND b.parent_booking_id IS NULL) OR ($3::bigint IS NOT NULL))
       ) AS pending_bookings,
 
+      -- 2. Revenue: Sum parents if unfiltered, sum attraction visits if filtered.
+      -- Note: For filtered state, we rely on distributed prices in child bookings.
       COALESCE(SUM(CASE
-        WHEN b.parent_booking_id IS NULL AND b.payment_status = 'Completed'
+        WHEN b.payment_status = 'Completed'
+          AND (($3::bigint IS NULL AND b.parent_booking_id IS NULL) OR ($3::bigint IS NOT NULL))
           THEN COALESCE(b.final_amount, b.total_amount, 0)
         END), 0) AS total_revenue,
 
       COALESCE(SUM(CASE
-        WHEN b.parent_booking_id IS NULL AND b.payment_status <> 'Completed'
+        WHEN b.payment_status <> 'Completed'
+          AND (($3::bigint IS NULL AND b.parent_booking_id IS NULL) OR ($3::bigint IS NOT NULL))
           THEN COALESCE(b.final_amount, b.total_amount, 0)
         END), 0) AS pending_revenue,
 
-      COALESCE(SUM(b.quantity) FILTER (
-        WHERE b.parent_booking_id IS NULL AND b.payment_status = 'Completed'
-      ), 0) AS total_people,
+      -- 3. People: Always sum attraction visits (standalone + combo children)
+      COALESCE(SUM(CASE
+        WHEN b.payment_status = 'Completed' AND b.attraction_id IS NOT NULL
+          THEN b.quantity
+        ELSE 0
+      END), 0) AS total_people,
 
       COUNT(*) FILTER (
-        WHERE b.parent_booking_id IS NULL
-          AND b.payment_status = 'Completed'
+        WHERE b.payment_status = 'Completed'
           AND b.booking_date = CURRENT_DATE
+          AND (($3::bigint IS NULL AND b.parent_booking_id IS NULL) OR ($3::bigint IS NOT NULL))
       ) AS today_bookings,
 
       COUNT(*) FILTER (
-        WHERE b.parent_booking_id IS NULL
-          AND b.payment_status <> 'Completed'
+        WHERE b.payment_status <> 'Completed'
+          AND (($3::bigint IS NULL AND b.parent_booking_id IS NULL) OR ($3::bigint IS NOT NULL))
       ) AS pending_payments,
 
       COUNT(DISTINCT b.user_id) FILTER (
-        WHERE b.parent_booking_id IS NULL
-          AND b.payment_status = 'Completed'
+        WHERE b.payment_status = 'Completed'
       ) AS unique_users
 
     FROM bookings b
     WHERE b.booking_status <> 'Cancelled'
-      AND b.booking_date >= COALESCE($1::date, CURRENT_DATE - INTERVAL '30 days')
+      AND b.booking_date >= COALESCE($1::date, CURRENT_DATE)
       AND b.booking_date <= COALESCE($2::date, CURRENT_DATE)
       AND ($3::bigint IS NULL OR b.attraction_id = $3::bigint);
   `;
@@ -74,7 +81,7 @@ async function getTopAttractions({ from = null, to = null, limit = 10, attractio
     FROM bookings b
     JOIN attractions a ON a.attraction_id = b.attraction_id
     WHERE b.booking_status <> 'Cancelled'
-      AND b.booking_date >= COALESCE($1::date, CURRENT_DATE - INTERVAL '30 days')
+      AND b.booking_date >= COALESCE($1::date, CURRENT_DATE)
       AND b.booking_date <= COALESCE($2::date, CURRENT_DATE)
       AND ($3::bigint IS NULL OR b.attraction_id = $3::bigint)
     GROUP BY a.attraction_id, a.title
@@ -630,7 +637,8 @@ async function getOpsDashboardStats({ from, to }) {
       FROM bookings b
       WHERE b.booking_status <> 'Cancelled'
         AND b.payment_status = 'Completed'
-        AND b.parent_booking_id IS NULL
+        -- Count all entries (standalone + combo children)
+        AND (b.parent_booking_id IS NULL AND b.item_type = 'Attraction' OR b.parent_booking_id IS NOT NULL)
         AND b.booking_date ${dateCond}
     ),
     merged AS (
@@ -867,18 +875,15 @@ async function getTransactionReport({ from, to, type = 'both' }) {
         COALESCE(a.title, c.name, 'Booking #' || b.booking_id) AS description,
         b.item_type::text AS item_type,
         CASE
-            WHEN b.parent_booking_id IS NOT NULL AND a.base_price IS NOT NULL THEN a.base_price
+            WHEN b.parent_booking_id IS NOT NULL THEN (b.total_amount / NULLIF(b.quantity, 0))
             WHEN b.quantity > 0 THEN ROUND((COALESCE(b.total_amount, 0) - COALESCE((SELECT SUM(ba2.price * ba2.quantity) FROM booking_addons ba2 WHERE ba2.booking_id = b.booking_id), 0)) / b.quantity, 2)
             ELSE 0 
         END AS unit_price,
-        CASE
-            WHEN b.parent_booking_id IS NOT NULL AND a.base_price IS NOT NULL THEN (a.base_price - (b.total_amount / b.quantity)) * b.quantity
-            ELSE COALESCE(b.discount_amount, 0)
-        END AS discount,
+        COALESCE(b.discount_amount, 0) AS discount,
         b.quantity,
         CASE
-            WHEN b.parent_booking_id IS NOT NULL THEN COALESCE(b.final_amount, b.total_amount, 0)
-            ELSE COALESCE(b.final_amount, b.total_amount, 0) - COALESCE((SELECT SUM(ba2.price * ba2.quantity) FROM booking_addons ba2 WHERE ba2.booking_id = b.booking_id), 0)
+            WHEN b.parent_booking_id IS NOT NULL THEN b.total_amount
+            ELSE COALESCE(b.final_amount, b.total_amount, 0) - CASE WHEN b.parent_booking_id IS NULL THEN COALESCE((SELECT SUM(ba2.price * ba2.quantity) FROM booking_addons ba2 WHERE ba2.booking_id = b.booking_id), 0) ELSE 0 END
         END AS nett,
         COALESCE(o.order_ref, b.booking_ref) AS order_ref
       FROM bookings b
@@ -901,20 +906,17 @@ async function getTransactionReport({ from, to, type = 'both' }) {
           b.booking_date,
           COALESCE(a.title, c.name, 'Booking #' || b.booking_id) AS description,
           b.item_type::text AS item_type,
-          CASE
-              WHEN b.parent_booking_id IS NOT NULL AND a.base_price IS NOT NULL THEN a.base_price
-              WHEN b.quantity > 0 THEN ROUND((COALESCE(b.total_amount, 0) - COALESCE((SELECT SUM(ba2.price * ba2.quantity) FROM booking_addons ba2 WHERE ba2.booking_id = b.booking_id), 0)) / b.quantity, 2)
-              ELSE 0 
-          END AS unit_price,
-          CASE
-              WHEN b.parent_booking_id IS NOT NULL AND a.base_price IS NOT NULL THEN (a.base_price - (b.total_amount / b.quantity)) * b.quantity
-              ELSE COALESCE(b.discount_amount, 0)
-          END AS discount,
+              CASE
+                  WHEN b.parent_booking_id IS NOT NULL THEN (b.total_amount / NULLIF(b.quantity, 0))
+                  WHEN b.quantity > 0 THEN ROUND((COALESCE(b.total_amount, 0) - COALESCE((SELECT SUM(ba2.price * ba2.quantity) FROM booking_addons ba2 WHERE ba2.booking_id = b.booking_id), 0)) / b.quantity, 2)
+                  ELSE 0 
+              END AS unit_price,
+          COALESCE(b.discount_amount, 0) AS discount,
           b.quantity,
-          CASE
-              WHEN b.parent_booking_id IS NOT NULL THEN COALESCE(b.final_amount, b.total_amount, 0)
-              ELSE COALESCE(b.final_amount, b.total_amount, 0) - COALESCE((SELECT SUM(ba2.price * ba2.quantity) FROM booking_addons ba2 WHERE ba2.booking_id = b.booking_id), 0)
-          END AS nett,
+              CASE
+                  WHEN b.parent_booking_id IS NOT NULL THEN b.total_amount
+                  ELSE COALESCE(b.final_amount, b.total_amount, 0) - CASE WHEN b.parent_booking_id IS NULL THEN COALESCE((SELECT SUM(ba2.price * ba2.quantity) FROM booking_addons ba2 WHERE ba2.booking_id = b.booking_id), 0) ELSE 0 END
+              END AS nett,
           COALESCE(o.order_ref, b.booking_ref) AS order_ref
         FROM bookings b
         LEFT JOIN attractions a ON a.attraction_id = b.attraction_id
@@ -1036,8 +1038,20 @@ async function getGuestReport({ from, to }) {
         AND b.booking_date ${dateCond}
       GROUP BY b.booking_date
     ),
+    daily_totals AS (
+      SELECT
+        b.booking_date,
+        COALESCE(SUM(b.quantity), 0) AS guests_count,
+        COALESCE(SUM(COALESCE(b.final_amount, b.total_amount, 0)), 0) AS total_revenue
+      FROM bookings b
+      WHERE b.booking_status <> 'Cancelled'
+        AND b.payment_status = 'Completed'
+        AND b.parent_booking_id IS NULL
+        AND b.booking_date ${dateCond}
+      GROUP BY b.booking_date
+    ),
     merged AS (
-      SELECT booking_date, title, SUM(guests) AS guests, SUM(revenue) AS revenue
+      SELECT booking_date, title, SUM(guests) AS guests
       FROM (SELECT * FROM child_guests UNION ALL SELECT * FROM standalone_guests) x
       GROUP BY booking_date, title
     ),
@@ -1054,11 +1068,12 @@ async function getGuestReport({ from, to }) {
       COALESCE(SUM(m.guests) FILTER (WHERE m.title ILIKE '%devil%'), 0) AS devil,
       COALESCE(ac.addon_orders, 0) AS fb,
       COALESCE(SUM(m.guests), 0) AS total,
-      COALESCE(SUM(m.revenue), 0) AS amt
+      COALESCE(dt.total_revenue, 0) AS amt
     FROM dates d
+    LEFT JOIN daily_totals dt ON dt.booking_date = d.booking_date
     LEFT JOIN merged m ON m.booking_date = d.booking_date
     LEFT JOIN addon_counts ac ON ac.booking_date = d.booking_date
-    GROUP BY d.booking_date, ac.addon_orders
+    GROUP BY d.booking_date, ac.addon_orders, dt.total_revenue
     ORDER BY d.booking_date DESC
   `;
 
