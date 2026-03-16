@@ -1148,7 +1148,13 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
       const pad = (n) => String(n).padStart(2, '0');
       const defaultDateTime = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
       const ts = raw?.paymentDetails?.[0]?.timestamp || raw?.fullResponse?.paymentDetails?.[0]?.timestamp || raw?.completedAt;
-      const paymentDateTime = ts ? new Date(ts).toISOString().replace(/[-T:Z]/g, '').slice(0, 14) : defaultDateTime;
+      let paymentDateTime = defaultDateTime;
+      if (ts) {
+        const d = new Date(ts);
+        d.setUTCHours(d.getUTCHours() + 5);
+        d.setUTCMinutes(d.getUTCMinutes() + 30);
+        paymentDateTime = `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
+      }
 
       // Update Order
       await client.query(
@@ -1212,7 +1218,13 @@ async function checkPhonePeStatus(orderIdOrTxnNo) {
       const pad = (n) => String(n).padStart(2, '0');
       const defaultDateTime = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
       const ts = raw?.paymentDetails?.[0]?.timestamp || raw?.fullResponse?.paymentDetails?.[0]?.timestamp || raw?.completedAt;
-      const paymentDateTime = ts ? new Date(ts).toISOString().replace(/[-T:Z]/g, '').slice(0, 14) : defaultDateTime;
+      let paymentDateTime = defaultDateTime;
+      if (ts) {
+        const d = new Date(ts);
+        d.setUTCHours(d.getUTCHours() + 5);
+        d.setUTCMinutes(d.getUTCMinutes() + 30);
+        paymentDateTime = `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
+      }
 
       // Update Order
       await client.query(
