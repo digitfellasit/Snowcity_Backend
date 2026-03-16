@@ -71,7 +71,10 @@ async function listBanners({ active = null, attraction_id = null, offer_id = nul
   const limitParam = paramIndex;
   const offsetParam = paramIndex + 1;
 
-  const query = `SELECT b.* FROM banners b
+  const query = `SELECT b.banner_id, b.web_image, b.web_image_alt, b.mobile_image, b.mobile_image_alt,
+                        b.title, b.description, b.linked_attraction_id, b.linked_offer_id,
+                        b.active, b.created_at, b.updated_at
+     FROM banners b
      ${whereSql}
      ORDER BY b.created_at DESC
      LIMIT $${limitParam} OFFSET $${offsetParam}`;

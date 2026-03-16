@@ -11,6 +11,8 @@ function getToken(req) {
   if (match) return match[1];
   // Fallback header
   if (req.headers['x-access-token']) return req.headers['x-access-token'];
+  // Fallback query parameter (for window.open downloads)
+  if (req.query && req.query.token) return req.query.token;
   return null;
 }
 

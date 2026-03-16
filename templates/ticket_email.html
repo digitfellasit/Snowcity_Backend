@@ -55,7 +55,8 @@
         }
 
         .logo-img {
-            max-width: 180px;
+            max-width: 150px;
+            width: 150px;
             height: auto;
             display: block;
             margin: 0 auto;
@@ -236,6 +237,12 @@
             color: #424242;
             font-weight: 600;
             font-size: 15px;
+            margin-bottom: 4px;
+        }
+
+        .payment-mode {
+            color: #666666;
+            font-size: 14px;
         }
 
         /* Billing Address */
@@ -376,7 +383,8 @@
             }
 
             .logo-img {
-                max-width: 150px;
+                max-width: 120px;
+                width: 120px;
             }
 
             .greeting {
@@ -481,7 +489,8 @@
             }
 
             .logo-img {
-                max-width: 130px;
+                max-width: 100px;
+                width: 100px;
             }
 
             .greeting {
@@ -548,8 +557,9 @@
 
             <!-- Payment Info -->
             <div class="payment-info">
-                <h4 class="payment-title">Payment Method</h4>
-                <p class="payment-method">{{payment_method}}</p>
+                <h4 class="payment-title">Payment Details</h4>
+                <div class="payment-method">Method: {{payment_method}}</div>
+                <div class="payment-mode">Mode: {{payment_mode}}</div>
             </div>
 
             <!-- Billing Info -->

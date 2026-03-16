@@ -174,8 +174,8 @@ async function sendTicketEmail(booking_id) {
   // Get order details for complete information
   const order = b.order_id ? await bookingsModel.getOrderWithDetails(b.order_id) : null;
 
-  const subject = `Your booking (${b.booking_ref}) with Snow City Bangalore is Confirmed`;
-  const text = `Hello${user?.name ? ' ' + user.name : ''},\n\nYour Snow City Bangalore booking has been confirmed.\nBooking Ref: ${b.booking_ref}\n\nEnjoy your visit!`;
+  const subject = `Your booking (${order?.order_ref || b.booking_ref}) with Snow City Bangalore is Confirmed`;
+  const text = `Hello${user?.name ? ' ' + user.name : ''},\n\nYour Snow City Bangalore booking has been confirmed.\nBooking Ref: ${order?.order_ref || b.booking_ref}\n\nEnjoy your visit!`;
 
   // Format order date
   const orderDate = order?.created_at ? new Date(order.created_at).toLocaleDateString('en-IN', {
@@ -194,12 +194,13 @@ async function sendTicketEmail(booking_id) {
 
   const html = renderTicketTemplate({
     name: user?.name || '',
-    order_ref: b.booking_ref || b.booking_id,
+    order_ref: order?.order_ref || order?.order_id || b.booking_ref || b.booking_id,
     order_date: orderDate,
     items_html: buildItemsHtml([b]),
     subtotal: formatMoney(subtotal),
     total: formatMoney(total),
     payment_method: order?.payment_mode || b.payment_mode || 'Online Payment',
+    payment_mode: order?.payment_method || 'N/A', // e.g., Credit Card, UPI
     billing_name: user?.name || '',
     billing_phone: user?.phone || '',
     billing_email: user?.email || '',
@@ -255,6 +256,7 @@ async function sendOrderEmail(order_id) {
     subtotal: formatMoney(subtotal),
     total: formatMoney(total),
     payment_method: order.payment_mode || 'Online Payment',
+    payment_mode: order.payment_method || 'N/A',
     billing_name: user?.name || '',
     billing_phone: user?.phone || '',
     billing_email: user?.email || '',

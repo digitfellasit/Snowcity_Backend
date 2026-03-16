@@ -13,7 +13,6 @@ function mapOffer(row) {
     image_url: row.image_url,
     image_alt: row.image_alt,
     rule_type: row.rule_type,
-    discount_percent: row.discount_percent,
     discount_type: row.discount_type || 'percent',
     discount_value: Number(row.discount_value ?? 0),
     max_discount: row.max_discount != null ? Number(row.max_discount) : null,
@@ -212,40 +211,44 @@ async function listOffers({ active = null, rule_type = null, date = null, q = ''
   let i = 1;
 
   if (active != null) {
-    where.push(`active = $${i++}`);
+    where.push(`o.active = $${i++}`);
     params.push(Boolean(active));
   }
   if (rule_type) {
-    where.push(`rule_type = $${i++}`);
+    where.push(`o.rule_type = $${i++}`);
     params.push(rule_type);
   }
   if (date) {
-    where.push(`(valid_from IS NULL OR valid_from <= $${i}::date) AND (valid_to IS NULL OR valid_to >= $${i}::date)`);
+    where.push(`(o.valid_from IS NULL OR o.valid_from <= $${i}::date) AND (o.valid_to IS NULL OR o.valid_to >= $${i}::date)`);
     params.push(date);
     i += 1;
   }
   if (q) {
-    where.push(`(title ILIKE $${i} OR description ILIKE $${i})`);
+    where.push(`(o.title ILIKE $${i} OR o.description ILIKE $${i})`);
     params.push(`%${q}%`);
     i += 1;
   }
 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const { rows } = await pool.query(
-    `SELECT o.*, (
-        SELECT COUNT(*) FROM offer_rules r WHERE r.offer_id = o.offer_id
-      ) AS rule_count,
-      -- Buy X Get Y details
-      CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.buy_qty ELSE NULL END AS buy_qty,
-      CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_qty ELSE NULL END AS get_qty,
-      CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_target_type ELSE NULL END AS get_target_type,
-      CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_target_id ELSE NULL END AS get_target_id,
-      CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_discount_type ELSE NULL END AS get_discount_type,
-      CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_discount_value ELSE NULL END AS get_discount_value
+    `SELECT o.offer_id, o.title, o.description, o.image_url, o.image_alt,
+            o.rule_type, o.discount_type, o.discount_value, o.max_discount,
+            o.valid_from, o.valid_to, o.active, o.created_at, o.updated_at,
+            COALESCE(rc.cnt, 0) AS rule_count,
+            -- Buy X Get Y details from first rule
+            CASE WHEN o.rule_type = 'buy_x_get_y' THEN fr.buy_qty ELSE NULL END AS buy_qty,
+            CASE WHEN o.rule_type = 'buy_x_get_y' THEN fr.get_qty ELSE NULL END AS get_qty,
+            CASE WHEN o.rule_type = 'buy_x_get_y' THEN fr.get_target_type ELSE NULL END AS get_target_type,
+            CASE WHEN o.rule_type = 'buy_x_get_y' THEN fr.get_target_id ELSE NULL END AS get_target_id,
+            CASE WHEN o.rule_type = 'buy_x_get_y' THEN fr.get_discount_type ELSE NULL END AS get_discount_type,
+            CASE WHEN o.rule_type = 'buy_x_get_y' THEN fr.get_discount_value ELSE NULL END AS get_discount_value
      FROM offers o
-     LEFT JOIN offer_rules orr ON orr.offer_id = o.offer_id AND orr.rule_id = (
-       SELECT MIN(rule_id) FROM offer_rules WHERE offer_id = o.offer_id
-     )
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS cnt FROM offer_rules WHERE offer_id = o.offer_id
+     ) rc ON true
+     LEFT JOIN LATERAL (
+       SELECT * FROM offer_rules WHERE offer_id = o.offer_id ORDER BY rule_id ASC LIMIT 1
+     ) fr ON true
      ${whereSql}
      ORDER BY o.created_at DESC
      LIMIT $${i} OFFSET $${i + 1}`,

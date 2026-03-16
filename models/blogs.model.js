@@ -155,7 +155,7 @@ async function getBlogBySlug(slug) {
   return mapBlog(rows[0]);
 }
 
-async function listBlogs({ active = null, q = '', limit = 50, offset = 0, blogIds = null } = {}) {
+async function listBlogs({ active = null, q = '', limit = 50, offset = 0, blogIds = null, includeContent = false } = {}) {
   const where = [];
   const params = [];
   let i = 1;
@@ -176,8 +176,16 @@ async function listBlogs({ active = null, q = '', limit = 50, offset = 0, blogId
   }
 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+  // Use lightweight columns for list views, full columns only when content is needed
+  const columns = includeContent
+    ? '*, COUNT(*) OVER() as total_count'
+    : `blog_id, title, slug, excerpt, featured_image, image_alt, author,
+       author_image_url, categories, tags, status, active,
+       published_at, created_at, updated_at, COUNT(*) OVER() as total_count`;
+
   const { rows } = await pool.query(
-    `SELECT *, COUNT(*) OVER() as total_count FROM blogs
+    `SELECT ${columns} FROM blogs
      ${whereSql}
      ORDER BY created_at DESC
      LIMIT $${i} OFFSET $${i + 1}`,

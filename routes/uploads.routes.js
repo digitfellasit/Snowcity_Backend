@@ -30,7 +30,8 @@ router.get('/:id/raw', async (req, res, next) => {
     if (!Number.isFinite(id) || id < 1) return res.status(400).json({ error: 'Invalid id' });
     const media = await mediaModel.getMediaById(id);
     if (!media) return res.status(404).json({ error: 'Not found' });
-    return res.redirect(media.url_path);
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    return res.redirect(301, media.url_path);
   } catch (err) {
     next(err);
   }
