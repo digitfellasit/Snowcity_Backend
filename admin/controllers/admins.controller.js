@@ -231,3 +231,49 @@ exports.getMe = async (req, res, next) => {
     });
   } catch (err) { next(err); }
 };
+/**
+ * DELETE /api/admin/admins/:id
+ * Deletes an admin user
+ */
+exports.deleteAdmin = async (req, res, next) => {
+  try {
+    const targetId = Number(req.params.id);
+    const requesterId = Number(req.user.id);
+
+    // 1. Prevent self-deletion
+    if (targetId === requesterId) {
+      return res.status(400).json({ error: 'You cannot delete your own account' });
+    }
+
+    // 2. Check if requester is superadmin/root
+    const roles = req.user.roles || [];
+    const isSuper = roles.includes('superadmin') || roles.includes('root');
+    if (!isSuper) {
+      return res.status(403).json({ error: 'Only superadmins can delete other admins' });
+    }
+
+    // 3. Prevent deleting the root user (ID 1 usually)
+    if (targetId === 1) {
+      return res.status(403).json({ error: 'The root administrator cannot be deleted' });
+    }
+
+    await withTransaction(async (client) => {
+      // Check if user exists
+      const { rows } = await client.query(
+        `SELECT user_id FROM users WHERE user_id = $1`,
+        [targetId]
+      );
+
+      if (rows.length === 0) {
+        throw Object.assign(new Error('Admin not found'), { status: 404 });
+      }
+
+      // Delete from users table (cascades to user_roles and admin_access)
+      await client.query(`DELETE FROM users WHERE user_id = $1`, [targetId]);
+    });
+
+    res.json({ success: true, message: 'Admin deleted successfully' });
+  } catch (err) {
+    next(err);
+  }
+};

@@ -15,6 +15,17 @@ const toNumber = (val) => {
   return Number.isFinite(num) ? num : null;
 };
 const sanitizeDate = (val) => (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val) ? val : null);
+const logAdminActivity = async (orderId, bookingId, eventType, eventDetail, oldValue, newValue, performedBy) => {
+  try {
+    await pool.query(
+      `INSERT INTO booking_activity_log (order_id, booking_id, event_type, event_detail, old_value, new_value, performed_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [orderId || null, bookingId || null, eventType, eventDetail, oldValue || null, newValue || null, performedBy || null]
+    );
+  } catch (err) {
+    console.error('Failed to log admin activity:', err);
+  }
+};
 
 exports.listBookings = async function listBookings(req, res, next) {
   try {
@@ -689,6 +700,15 @@ exports.updateBooking = async function updateBooking(req, res, next) {
       } catch (propErr) {
         console.error('Failed to propagate status:', propErr?.message || propErr);
       }
+
+      // Log the propagation action
+      if (payload.booking_status) {
+        await logAdminActivity(resolvedOrderId, null, 'status_' + payload.booking_status.toLowerCase(), `Booking status changed to ${payload.booking_status} (Propagated)`, current.booking_status, payload.booking_status, req.user.email);
+      }
+      if (payload.ticket_status) {
+        await logAdminActivity(resolvedOrderId, null, payload.ticket_status === 'REDEEMED' ? 'ticket_redeemed' : 'ticket_not_redeemed', `Ticket status changed to ${payload.ticket_status} (Propagated)`, current.ticket_status, payload.ticket_status, req.user.email);
+      }
+
       // Re-fetch the updated booking to return
       const updated = await bookingsModel.getBookingById(resolvedBookingId);
       return res.json(updated);
@@ -697,6 +717,14 @@ exports.updateBooking = async function updateBooking(req, res, next) {
     // Non-propagating update: single booking only
     const updated = await bookingsModel.updateBooking(resolvedBookingId, payload);
     if (!updated) return res.status(404).json({ error: 'Booking not found' });
+
+    // Log individual update
+    if (payload.booking_status && payload.booking_status !== current.booking_status) {
+      await logAdminActivity(resolvedOrderId, resolvedBookingId, 'status_' + payload.booking_status.toLowerCase(), `Booking status changed to ${payload.booking_status}`, current.booking_status, payload.booking_status, req.user.email);
+    }
+    if (payload.ticket_status && payload.ticket_status !== current.ticket_status) {
+      await logAdminActivity(resolvedOrderId, resolvedBookingId, payload.ticket_status === 'REDEEMED' ? 'ticket_redeemed' : 'ticket_not_redeemed', `Ticket status changed to ${payload.ticket_status}`, current.ticket_status, payload.ticket_status, req.user.email);
+    }
 
     if (payload.payment_status === 'Completed') {
       // PDF generated on-the-fly when needed — no file storage
@@ -751,6 +779,9 @@ exports.resendTicket = async function resendTicket(req, res, next) {
       whatsappResult = { success: false, error: e?.message || 'Unknown error' };
     }
 
+    // Log resend action
+    await logAdminActivity(booking.order_id, id, 'ticket_resent', 'Ticket resent (Email & WhatsApp)', null, null, req.user.email);
+
     res.json({ success: true, email: result, whatsapp: whatsappResult });
   } catch (err) {
     next(err);
@@ -779,6 +810,8 @@ exports.resendWhatsApp = async function resendWhatsApp(req, res, next) {
       const sent = await interaktService.sendTicketForBookingInstant(id, true);
       if (sent && sent.success) {
         await bookingsModel.updateBooking(id, { whatsapp_sent: true });
+        // Log resend WhatsApp
+        await logAdminActivity(booking.order_id, id, 'whatsapp_sent', 'WhatsApp ticket resent', null, null, req.user.email);
       }
       return res.json({ success: true, whatsapp: sent });
     } catch (e) {
@@ -811,6 +844,8 @@ exports.resendEmail = async function resendEmail(req, res, next) {
     await bookingsModel.updateBooking(id, { email_sent: false });
     try {
       const result = await ticketEmailService.sendTicketEmail(id);
+      // Log resend Email
+      await logAdminActivity(booking.order_id, id, 'email_sent', 'Email ticket resent', null, null, req.user.email);
       return res.json({ success: true, email: result });
     } catch (e) {
       console.error('Failed to resend ticket email:', e?.message || e);
@@ -889,6 +924,8 @@ exports.cancelBooking = async function cancelBooking(req, res, next) {
 
     const updated = await bookingService.cancelBooking(id);
     if (!updated) return res.status(404).json({ error: 'Booking not found' });
+    // Log cancellation
+    await logAdminActivity(updated.order_id, id, 'status_cancelled', 'Booking cancelled by admin', row.booking_status, 'Cancelled', req.user.email);
     res.json(updated);
   } catch (err) {
     next(err);

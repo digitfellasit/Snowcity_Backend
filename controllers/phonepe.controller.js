@@ -16,7 +16,7 @@ async function getOrderGtmData(orderId) {
 
     const bookingsRes = await pool.query(
       `SELECT b.booking_id, b.item_type, b.quantity, b.total_amount, b.final_amount, b.booking_date,
-              b.slot_label, b.parent_booking_id,
+              b.slot_label, b.parent_booking_id, b.attraction_id, b.combo_id,
               COALESCE(a.title, c.name, 'Booking') AS item_title
        FROM bookings b
        LEFT JOIN attractions a ON a.attraction_id = b.attraction_id
@@ -42,6 +42,7 @@ async function getOrderGtmData(orderId) {
       addonsTotal += itemAddons;
 
       items.push({
+        id: b.attraction_id || b.combo_id || b.booking_id,
         title: b.item_title,
         type: b.item_type === 'Combo' ? 'combo' : 'single',
         quantity: Number(b.quantity || 1),

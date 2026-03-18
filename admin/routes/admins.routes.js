@@ -15,5 +15,6 @@ router.post('/', ctrl.createAdmin);
 // Access management (scoping)
 router.get('/:id/access', ctrl.getAccess);
 router.put('/:id/access', ctrl.setAccess);
+router.delete('/:id', ctrl.deleteAdmin);
 
 module.exports = router;
