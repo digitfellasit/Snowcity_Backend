@@ -11,6 +11,9 @@ const corsOptions = require('./config/cors');
 
 const app = express();
 
+// Security Headers - FIRST!
+app.use(helmet());
+
 // Trust proxy (for rate limiting, IP, secure cookies if behind proxy)
 if (process.env.TRUST_PROXY) {
   app.set('trust proxy', Number(process.env.TRUST_PROXY));
@@ -21,12 +24,6 @@ app.use(express.json({ limit: process.env.MAX_JSON_SIZE || '2mb' }));
 app.use(express.urlencoded({ limit: process.env.MAX_URLENCODED_SIZE || '2mb', extended: true }));
 
 // Security & CORS — EARLY (BEFORE ROUTES!)
-app.use(
-  helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
-    crossOriginEmbedderPolicy: false,
-  })
-);
 app.use(compression());
 app.use(hpp());
 app.use(cors(corsOptions));
