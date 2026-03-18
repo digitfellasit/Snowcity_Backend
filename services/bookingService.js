@@ -661,7 +661,13 @@ async function createBookings(payload) {
 
   // 3. Perform DB Transaction
   return withTransaction(async (client) => {
-    // A. Create Parent Order
+    // A. Set current user for trigger if provided
+    const performedBy = items[0]?.performedBy || null;
+    if (performedBy) {
+      await client.query(`SELECT set_config('app.current_user', $1, true)`, [performedBy]);
+    }
+
+    // B. Create Parent Order
     const orderRes = await client.query(
       `INSERT INTO orders 
            (user_id, total_amount, discount_amount, payment_mode, coupon_code, payment_status)

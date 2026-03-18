@@ -1,5 +1,5 @@
 // admin/controllers/bookings.controller.js
-const { pool } = require('../../config/db');
+const { pool, withTransaction } = require('../../config/db');
 const bookingsModel = require('../../models/bookings.model');
 const bookingService = require('../../services/bookingService');
 const payphiService = require('../../services/payphiService');
@@ -521,6 +521,7 @@ exports.getBookingById = async function getBookingById(req, res, next) {
         event_detail: log.event_detail,
         old_value: log.old_value,
         new_value: log.new_value,
+        performed_by: log.performed_by,
         created_at: log.created_at,
       })),
       created_at: order.created_at,
@@ -561,6 +562,7 @@ exports.createManualBooking = async function createManualBooking(req, res, next)
       coupon_code,
       payment_mode,
       booking_date,
+      performedBy: req.user.email
     });
 
     // Add user to Interakt contacts if phone exists
@@ -582,19 +584,25 @@ exports.createManualBooking = async function createManualBooking(req, res, next)
     }
 
     if (markPaid) {
-      await bookingsModel.setPayment(booking.booking_id, {
-        payment_status: 'Completed',
-        payment_ref: booking.booking_ref,
-      });
-      // PDF generated on-the-fly when needed — no file storage
-      try {
-        const sent = await interaktService.sendTicketForBooking(booking.booking_id);
-        if (sent && sent.success) {
-          await bookingsModel.updateBooking(booking.booking_id, { whatsapp_sent: true });
+      await withTransaction(async (client) => {
+        if (req.user?.email) {
+          await client.query(`SELECT set_config('app.current_user', $1, true)`, [req.user.email]);
         }
-      } catch (e) {
-        console.error('Failed to send WhatsApp ticket (createManualBooking):', e?.message || e);
-      }
+        await bookingsModel.setPayment(booking.booking_id, {
+          payment_status: 'Completed',
+          payment_ref: booking.booking_ref,
+        }, { client });
+        
+        // PDF generated on-the-fly when needed — no file storage
+        try {
+          const sent = await interaktService.sendTicketForBooking(booking.booking_id);
+          if (sent && sent.success) {
+            await bookingsModel.updateBooking(booking.booking_id, { whatsapp_sent: true }, { client });
+          }
+        } catch (e) {
+          console.error('Failed to send WhatsApp ticket (createManualBooking):', e?.message || e);
+        }
+      });
     }
 
     res.status(201).json(booking);
@@ -674,70 +682,71 @@ exports.updateBooking = async function updateBooking(req, res, next) {
       }
     }
 
-    // If propagate: update ALL bookings in the order in one query
-    if (req.body.propagate && resolvedOrderId) {
-      try {
+    // Use withTransaction to ensure SET LOCAL and UPDATE happen in same session for trigger
+    const result = await withTransaction(async (client) => {
+      // 1. Set current user for trigger
+      if (req.user?.email) {
+        await client.query(`SELECT set_config('app.current_user', $1, true)`, [req.user.email]);
+      }
+
+      let updatedRecord = null;
+
+      // 2. If propagate: update ALL bookings in the order
+      if (req.body.propagate && resolvedOrderId) {
         // Propagate booking_status if provided
         if (payload.booking_status) {
-          const result = await pool.query(
+          const resProp = await client.query(
             `UPDATE bookings SET booking_status = $1, updated_at = NOW()
              WHERE order_id = $2
              RETURNING booking_id`,
             [payload.booking_status, resolvedOrderId]
           );
-          console.log(`✅ Propagated booking_status="${payload.booking_status}" to ${result.rowCount} bookings in order_id=${resolvedOrderId}`);
+          console.log(`✅ Propagated booking_status="${payload.booking_status}" to ${resProp.rowCount} bookings in order_id=${resolvedOrderId}`);
         }
         // Propagate ticket_status if provided
         if (payload.ticket_status) {
-          const result = await pool.query(
+          const resProp = await client.query(
             `UPDATE bookings SET ticket_status = $1, updated_at = NOW()
              WHERE order_id = $2
              RETURNING booking_id`,
             [payload.ticket_status, resolvedOrderId]
           );
-          console.log(`✅ Propagated ticket_status="${payload.ticket_status}" to ${result.rowCount} bookings in order_id=${resolvedOrderId}`);
+          console.log(`✅ Propagated ticket_status="${payload.ticket_status}" to ${resProp.rowCount} bookings in order_id=${resolvedOrderId}`);
         }
-      } catch (propErr) {
-        console.error('Failed to propagate status:', propErr?.message || propErr);
+        
+        // Manual logs for propagation are still needed if we want specific detail text like "(Propagated)"
+        // But the trigger will already have caught the status change. 
+        // To avoid double-logging, we rely purely on the trigger.
+        
+        updatedRecord = await bookingsModel.getBookingById(resolvedBookingId);
+      } else {
+        // 3. Non-propagating update: single booking only
+        updatedRecord = await bookingsModel.updateBooking(resolvedBookingId, payload, { client });
       }
 
-      // Log the propagation action
-      if (payload.booking_status) {
-        await logAdminActivity(resolvedOrderId, null, 'status_' + payload.booking_status.toLowerCase(), `Booking status changed to ${payload.booking_status} (Propagated)`, current.booking_status, payload.booking_status, req.user.email);
-      }
-      if (payload.ticket_status) {
-        await logAdminActivity(resolvedOrderId, null, payload.ticket_status === 'REDEEMED' ? 'ticket_redeemed' : 'ticket_not_redeemed', `Ticket status changed to ${payload.ticket_status} (Propagated)`, current.ticket_status, payload.ticket_status, req.user.email);
-      }
+      return updatedRecord;
+    });
 
-      // Re-fetch the updated booking to return
-      const updated = await bookingsModel.getBookingById(resolvedBookingId);
-      return res.json(updated);
-    }
+    if (!result) return res.status(404).json({ error: 'Booking not found or not updated' });
 
-    // Non-propagating update: single booking only
-    const updated = await bookingsModel.updateBooking(resolvedBookingId, payload);
-    if (!updated) return res.status(404).json({ error: 'Booking not found' });
-
-    // Log individual update
-    if (payload.booking_status && payload.booking_status !== current.booking_status) {
-      await logAdminActivity(resolvedOrderId, resolvedBookingId, 'status_' + payload.booking_status.toLowerCase(), `Booking status changed to ${payload.booking_status}`, current.booking_status, payload.booking_status, req.user.email);
-    }
-    if (payload.ticket_status && payload.ticket_status !== current.ticket_status) {
-      await logAdminActivity(resolvedOrderId, resolvedBookingId, payload.ticket_status === 'REDEEMED' ? 'ticket_redeemed' : 'ticket_not_redeemed', `Ticket status changed to ${payload.ticket_status}`, current.ticket_status, payload.ticket_status, req.user.email);
-    }
-
+    // 4. Handle side effects (outside transaction)
     if (payload.payment_status === 'Completed') {
-      // PDF generated on-the-fly when needed — no file storage
       try {
         const sent = await interaktService.sendTicketForBooking(resolvedBookingId);
         if (sent && sent.success) {
-          await bookingsModel.updateBooking(resolvedBookingId, { whatsapp_sent: true });
+          await withTransaction(async (client) => {
+            if (req.user?.email) {
+              await client.query(`SELECT set_config('app.current_user', $1, true)`, [req.user.email]);
+            }
+            await bookingsModel.updateBooking(resolvedBookingId, { whatsapp_sent: true }, { client });
+          });
         }
       } catch (e) {
         console.error('Failed to send WhatsApp ticket (updateBooking):', e?.message || e);
       }
     }
-    res.json(updated);
+    
+    res.json(result);
   } catch (err) {
     next(err);
   }
@@ -760,29 +769,38 @@ exports.resendTicket = async function resendTicket(req, res, next) {
       return res.status(400).json({ error: 'Cannot resend ticket without user information' });
     }
 
-    // Generate PDF on-the-fly — no file storage
-    await bookingsModel.updateBooking(id, { email_sent: false });
-    const result = await ticketEmailService.sendTicketEmail(id);
-
-    // Also send WhatsApp
-    let whatsappResult = null;
-    try {
-      const sent = await interaktService.sendTicketForBookingInstant(id, true);
-      if (sent && sent.success) {
-        await bookingsModel.updateBooking(id, { whatsapp_sent: true });
-        whatsappResult = sent;
-      } else {
-        whatsappResult = { success: false, reason: sent?.reason || 'Send failed' };
+    // Use withTransaction to set current user for trigger
+    const finalResult = await withTransaction(async (client) => {
+      if (req.user?.email) {
+        await client.query(`SELECT set_config('app.current_user', $1, true)`, [req.user.email]);
       }
-    } catch (e) {
-      console.error('Failed to resend WhatsApp ticket:', e?.message || e);
-      whatsappResult = { success: false, error: e?.message || 'Unknown error' };
-    }
 
-    // Log resend action
-    await logAdminActivity(booking.order_id, id, 'ticket_resent', 'Ticket resent (Email & WhatsApp)', null, null, req.user.email);
+      // Generate PDF on-the-fly — no file storage
+      await bookingsModel.updateBooking(id, { email_sent: false }, { client });
+      const emailRes = await ticketEmailService.sendTicketEmail(id);
 
-    res.json({ success: true, email: result, whatsapp: whatsappResult });
+      // Also send WhatsApp
+      let whatsappRes = null;
+      try {
+        const sent = await interaktService.sendTicketForBookingInstant(id, true);
+        if (sent && sent.success) {
+          await bookingsModel.updateBooking(id, { whatsapp_sent: true }, { client });
+          whatsappRes = sent;
+        } else {
+          whatsappRes = { success: false, reason: sent?.reason || 'Send failed' };
+        }
+      } catch (e) {
+        console.error('Failed to resend WhatsApp ticket:', e?.message || e);
+        whatsappRes = { success: false, error: e?.message || 'Unknown error' };
+      }
+
+      // Log resend action
+      await logAdminActivity(booking.order_id, id, 'ticket_resent', 'Ticket resent (Email & WhatsApp)', null, null, req.user.email);
+
+      return { email: emailRes, whatsapp: whatsappRes };
+    });
+
+    res.json({ success: true, ...finalResult });
   } catch (err) {
     next(err);
   }
@@ -805,13 +823,18 @@ exports.resendWhatsApp = async function resendWhatsApp(req, res, next) {
       return res.status(400).json({ error: 'Cannot resend WhatsApp without user information' });
     }
 
-    // PDF generated on-the-fly — no file storage
+    // Use withTransaction to set current user for trigger
     try {
       const sent = await interaktService.sendTicketForBookingInstant(id, true);
       if (sent && sent.success) {
-        await bookingsModel.updateBooking(id, { whatsapp_sent: true });
-        // Log resend WhatsApp
-        await logAdminActivity(booking.order_id, id, 'whatsapp_sent', 'WhatsApp ticket resent', null, null, req.user.email);
+        await withTransaction(async (client) => {
+          if (req.user?.email) {
+            await client.query(`SELECT set_config('app.current_user', $1, true)`, [req.user.email]);
+          }
+          await bookingsModel.updateBooking(id, { whatsapp_sent: true }, { client });
+          // Log resend WhatsApp
+          await logAdminActivity(booking.order_id, id, 'whatsapp_sent', 'WhatsApp ticket resent', null, null, req.user.email);
+        });
       }
       return res.json({ success: true, whatsapp: sent });
     } catch (e) {
@@ -840,12 +863,18 @@ exports.resendEmail = async function resendEmail(req, res, next) {
       return res.status(400).json({ error: 'Cannot resend email without user information' });
     }
 
-    // PDF generated on-the-fly — no file storage
-    await bookingsModel.updateBooking(id, { email_sent: false });
+    // Use withTransaction to set current user for trigger
     try {
-      const result = await ticketEmailService.sendTicketEmail(id);
-      // Log resend Email
-      await logAdminActivity(booking.order_id, id, 'email_sent', 'Email ticket resent', null, null, req.user.email);
+      const result = await withTransaction(async (client) => {
+        if (req.user?.email) {
+          await client.query(`SELECT set_config('app.current_user', $1, true)`, [req.user.email]);
+        }
+        await bookingsModel.updateBooking(id, { email_sent: false }, { client });
+        const emailRes = await ticketEmailService.sendTicketEmail(id);
+        // Log resend Email
+        await logAdminActivity(booking.order_id, id, 'email_sent', 'Email ticket resent', null, null, req.user.email);
+        return emailRes;
+      });
       return res.json({ success: true, email: result });
     } catch (e) {
       console.error('Failed to resend ticket email:', e?.message || e);
@@ -922,11 +951,15 @@ exports.cancelBooking = async function cancelBooking(req, res, next) {
       return res.status(403).json({ error: 'Forbidden: attraction not in scope' });
     }
 
-    const updated = await bookingService.cancelBooking(id);
-    if (!updated) return res.status(404).json({ error: 'Booking not found' });
-    // Log cancellation
-    await logAdminActivity(updated.order_id, id, 'status_cancelled', 'Booking cancelled by admin', row.booking_status, 'Cancelled', req.user.email);
-    res.json(updated);
+    const result = await withTransaction(async (client) => {
+      if (req.user?.email) {
+        await client.query(`SELECT set_config('app.current_user', $1, true)`, [req.user.email]);
+      }
+      return bookingService.cancelBooking(id);
+    });
+
+    if (!result) return res.status(404).json({ error: 'Booking not found' });
+    res.json(result);
   } catch (err) {
     next(err);
   }

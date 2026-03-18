@@ -582,7 +582,7 @@ async function cancelOrder(order_id) {
   });
 }
 
-async function updateBooking(booking_id, updates = {}) {
+async function updateBooking(booking_id, updates = {}, { client } = {}) {
   if (!booking_id || typeof updates !== 'object' || updates === null) return null;
 
   const allowedFields = [
@@ -609,7 +609,8 @@ async function updateBooking(booking_id, updates = {}) {
     'whatsapp_sent',
     'email_sent',
     'payment_method',
-    'payment_datetime'
+    'payment_datetime',
+    'payment_txn_no',
   ];
 
   const entries = allowedFields
@@ -631,8 +632,15 @@ async function updateBooking(booking_id, updates = {}) {
   const sql = `UPDATE bookings SET ${setFragments.join(', ')}, updated_at = NOW() WHERE booking_id = $${index} RETURNING *`;
   params.push(booking_id);
 
-  const { rows } = await pool.query(sql, params);
+  const runner = client || pool;
+  const { rows } = await runner.query(sql, params);
   return mapBooking(rows[0]);
+}
+
+async function setPayment(booking_id, { payment_status, payment_ref = null, payment_txn_no = undefined }, { client } = {}) {
+  const payload = { payment_status, payment_ref };
+  if (payment_txn_no !== undefined) payload.payment_txn_no = payment_txn_no;
+  return updateBooking(booking_id, payload, { client });
 }
 
 // Calendar view - bookings grouped by date with scope filtering
@@ -759,6 +767,7 @@ module.exports = {
   updatePaymentStatus,
   cancelOrder,
   updateBooking,
+  setPayment,
   getBookingsCalendar,
   getBookingSlotsSummary
 };

@@ -517,7 +517,7 @@ async function generateTicketBuffer(booking_id) {
 
   return {
     buffer,
-    filename: `ORDER_${data.orderRef}.pdf`,
+    filename: `TICKET_${data.orderRef}.pdf`,
     orderRef: data.orderRef,
     orderId:  data.orderId,
   };
