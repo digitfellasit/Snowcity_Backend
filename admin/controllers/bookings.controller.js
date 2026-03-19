@@ -32,6 +32,7 @@ exports.listBookings = async function listBookings(req, res, next) {
     const {
       search = '',
       payment_status,
+      payment_mode,
       booking_status,
       user_email,
       user_phone,
@@ -108,6 +109,13 @@ exports.listBookings = async function listBookings(req, res, next) {
     if (payment_status && ['Pending', 'Completed', 'Failed', 'Cancelled', 'INITIATED', 'SUCCESS', 'TIMED_OUT'].includes(payment_status)) {
       where.push(`b.payment_status = $${i}`);
       params.push(payment_status);
+      i++;
+    }
+
+    // ── Payment mode ──
+    if (payment_mode) {
+      where.push(`ord.payment_mode = $${i}`);
+      params.push(payment_mode);
       i++;
     }
 
@@ -222,6 +230,7 @@ exports.listBookings = async function listBookings(req, res, next) {
         ord.payment_mode AS order_payment_mode,
         ord.payment_ref AS order_payment_ref,
         ord.payment_txn_no AS order_payment_txn_no,
+        ord.payment_method AS order_payment_method,
         u.name AS user_name,
         u.email AS user_email,
         u.phone AS user_phone,
