@@ -7,6 +7,7 @@ const DEFAULT_ORIGINS = [
   'https://mercury-uat.phonepe.com',
   'https://secure-ptg.phicommerce.com',
   'https://steady-unicorn-dfe4b1.netlify.app',
+  'https://www.google.com/ccm/collect',
   // Local development
   'https://snowcity.vercel.app',
   'https://app.snowcityblr.com',
