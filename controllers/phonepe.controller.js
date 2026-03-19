@@ -27,10 +27,12 @@ async function getOrderGtmData(orderId) {
     );
 
     let addonsTotal = 0;
+    let ticketsTotal = 0;
     const items = [];
     let totalTickets = 0;
     for (const b of bookingsRes.rows) {
       totalTickets += Number(b.quantity || 1);
+      ticketsTotal += Number(b.total_amount || 0);
       const addonsRes = await pool.query(
         `SELECT ba.quantity, ba.price, ad.title
          FROM booking_addons ba JOIN addons ad ON ad.addon_id = ba.addon_id
@@ -53,6 +55,8 @@ async function getOrderGtmData(orderId) {
     }
 
     return {
+      ticketsValue: ticketsTotal,
+      cartValue: ticketsTotal + addonsTotal,
       totalPaid: Number(order.final_amount ?? order.total_amount ?? 0),
       totalTickets,
       addonsValue: addonsTotal,

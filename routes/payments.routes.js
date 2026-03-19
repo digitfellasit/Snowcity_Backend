@@ -31,10 +31,12 @@ async function getOrderGtmData(orderId) {
     );
 
     let addonsTotal = 0;
+    let ticketsTotal = 0;
     const items = [];
     let totalTickets = 0;
     for (const b of bookingsRes.rows) {
       totalTickets += Number(b.quantity || 1);
+      ticketsTotal += Number(b.total_amount || 0);
 
       // Add main item
       items.push({
@@ -71,6 +73,8 @@ async function getOrderGtmData(orderId) {
     }
 
     return {
+      ticketsValue: ticketsTotal,
+      cartValue: ticketsTotal + addonsTotal,
       totalPaid: Number(order.final_amount ?? order.total_amount ?? 0),
       totalTickets,
       addonsValue: addonsTotal,
