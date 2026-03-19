@@ -35,16 +35,8 @@ async function getOrderGtmData(orderId) {
     let totalTickets = 0;
     for (const b of bookingsRes.rows) {
       totalTickets += Number(b.quantity || 1);
-      const addonsRes = await pool.query(
-        `SELECT ba.quantity, ba.price, ad.title
-         FROM booking_addons ba JOIN addons ad ON ad.addon_id = ba.addon_id
-         WHERE ba.booking_id = $1`,
-        [b.booking_id]
-      );
-      let itemAddons = 0;
-      for (const a of addonsRes.rows) itemAddons += Number(a.price || 0) * Number(a.quantity || 1);
-      addonsTotal += itemAddons;
 
+      // Add main item
       items.push({
         id: b.attraction_id || b.combo_id || b.booking_id,
         title: b.item_title,
@@ -54,6 +46,28 @@ async function getOrderGtmData(orderId) {
         timeSlot: b.slot_label || '',
         date: b.booking_date || '',
       });
+
+      // Add addons
+      const addonsRes = await pool.query(
+        `SELECT ba.quantity, ba.price, ad.title, ad.addon_id
+         FROM booking_addons ba JOIN addons ad ON ad.addon_id = ba.addon_id
+         WHERE ba.booking_id = $1`,
+        [b.booking_id]
+      );
+      for (const a of addonsRes.rows) {
+        const aQty = Number(a.quantity || 1);
+        const aPrice = Number(a.price || 0);
+        addonsTotal += aPrice * aQty;
+        items.push({
+          id: a.addon_id,
+          title: a.title,
+          type: 'addon',
+          quantity: aQty,
+          pricePerTicket: aPrice,
+          timeSlot: b.slot_label || '',
+          date: b.booking_date || '',
+        });
+      }
     }
 
     return {
@@ -63,6 +77,7 @@ async function getOrderGtmData(orderId) {
       discountValue: Number(order.discount_amount || 0),
       promoCode: order.coupon_code || '',
       paymentMode: order.payment_mode || '',
+      payment_mode: order.payment_mode || '',
       items,
     };
   } catch (err) {

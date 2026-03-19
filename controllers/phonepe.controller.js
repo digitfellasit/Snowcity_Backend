@@ -59,6 +59,7 @@ async function getOrderGtmData(orderId) {
       discountValue: Number(order.discount_amount || 0),
       promoCode: order.coupon_code || '',
       paymentMode: order.payment_mode || '',
+      payment_mode: order.payment_mode || '',
       items,
     };
   } catch (err) {
