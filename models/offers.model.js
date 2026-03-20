@@ -55,6 +55,8 @@ function mapRule(row) {
     specific_date: row.specific_date,
     specific_time: row.specific_time,
     combo_child_adjustments: row.combo_child_adjustments,
+    attraction_slug: row.attraction_slug,
+    combo_slug: row.combo_slug,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -62,7 +64,12 @@ function mapRule(row) {
 
 async function listOfferRules(offer_id) {
   const { rows } = await pool.query(
-    `SELECT * FROM offer_rules WHERE offer_id = $1 ORDER BY rule_id ASC`,
+    `SELECT r.*, a.slug as attraction_slug, c.slug as combo_slug 
+     FROM offer_rules r
+     LEFT JOIN attractions a ON r.target_type = 'attraction' AND r.target_id = a.attraction_id
+     LEFT JOIN combos c ON r.target_type = 'combo' AND r.target_id = c.combo_id
+     WHERE r.offer_id = $1 
+     ORDER BY r.rule_id ASC`,
     [offer_id]
   );
   return rows.map(mapRule);
@@ -254,7 +261,27 @@ async function listOffers({ active = null, rule_type = null, date = null, q = ''
      LIMIT $${i} OFFSET $${i + 1}`,
     [...params, limit, offset]
   );
-  return rows.map(mapOffer);
+
+  const offers = rows.map(mapOffer);
+
+  if (offers.length > 0) {
+    const offerIds = offers.map(o => o.offer_id);
+    const rulesRows = await pool.query(
+      `SELECT r.*, a.slug as attraction_slug, c.slug as combo_slug 
+       FROM offer_rules r
+       LEFT JOIN attractions a ON r.target_type = 'attraction' AND r.target_id = a.attraction_id
+       LEFT JOIN combos c ON r.target_type = 'combo' AND r.target_id = c.combo_id
+       WHERE r.offer_id = ANY($1::int[]) 
+       ORDER BY r.rule_id ASC`,
+      [offerIds]
+    );
+    const mappedRules = rulesRows.rows.map(mapRule);
+    offers.forEach(o => {
+      o.rules = mappedRules.filter(r => String(r.offer_id) === String(o.offer_id));
+    });
+  }
+
+  return offers;
 }
 
 async function updateOffer(offer_id, payload = {}) {
@@ -345,16 +372,16 @@ async function findApplicableOfferRule({
          o.rule_type = 'dynamic_pricing'
          OR $5::date > $10::date
        )
-       AND (o.valid_from IS NULL OR o.valid_from <= $5::date)
-       AND (o.valid_to IS NULL OR o.valid_to >= $6::date)
+       AND (o.valid_from IS NULL OR o.valid_from::date <= $5::date)
+       AND (o.valid_to IS NULL OR o.valid_to::date >= $6::date)
        AND (
             (r.applies_to_all = true AND r.target_type = $1)
          OR (r.target_type = $1 AND r.target_id IS NOT NULL AND $2::int IS NOT NULL AND r.target_id = $2::int)
        )
        AND ($3::text IS NULL OR r.slot_type IS NULL OR r.slot_type = $3::text)
        AND ($4::int IS NULL OR r.slot_id IS NULL OR r.slot_id = $4::int)
-       AND (r.date_from IS NULL OR r.date_from <= $5::date)
-       AND (r.date_to IS NULL OR r.date_to >= $6::date)
+       AND (r.date_from IS NULL OR r.date_from::date <= $5::date)
+       AND (r.date_to IS NULL OR r.date_to::date >= $6::date)
        AND ($7::time IS NULL OR r.time_from IS NULL OR r.time_from <= $7::time)
        AND ($8::time IS NULL OR r.time_to IS NULL OR r.time_to >= $8::time)
        AND (r.specific_date IS NULL OR r.specific_date = $5::date)

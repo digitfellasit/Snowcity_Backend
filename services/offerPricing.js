@@ -84,12 +84,14 @@ async function applyOfferPricing({
     if (offer?.rule_type === 'happy_hour') {
       const ruleFrom = rule?.time_from || null;
       const ruleTo = rule?.time_to || null;
-      if (!ruleFrom || !ruleTo || !matchTime) {
+      if (!ruleFrom || !ruleTo) {
         return { unit: base, discount: 0, discount_percent: 0, offer: null };
       }
-      // Compare strings 'HH:MM:SS' directly is safe for same-day times
-      if (String(matchTime) < String(ruleFrom) || String(matchTime) > String(ruleTo)) {
-        return { unit: base, discount: 0, discount_percent: 0, offer: null };
+      if (matchTime) {
+        // Compare strings 'HH:MM:SS' directly is safe for same-day times
+        if (String(matchTime) < String(ruleFrom) || String(matchTime) > String(ruleTo)) {
+          return { unit: base, discount: 0, discount_percent: 0, offer: null };
+        }
       }
     }
   } catch (err) {

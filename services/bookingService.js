@@ -466,7 +466,7 @@ async function computeTotals(item = {}) {
         itemId: item_type === 'Combo' ? item.combo_id : item.attraction_id,
         basePrice: baseUnit,
         date: new Date(item.booking_date),
-        time: item.slot_start_time || item.slotStartTime || item.booking_time || '12:00:00',
+        time: item.slot_start_time || item.slotStartTime || item.booking_time || null,
         quantity: 1, // Calculate per-unit price
       });
 

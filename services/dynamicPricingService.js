@@ -101,10 +101,10 @@ async function getApplicableRules({ itemType, itemId, date, time, holidays = [] 
       )
       AND (r.date_from IS NULL OR r.date_from <= $1)
       AND (r.date_to IS NULL OR r.date_to >= $1)
-      AND (r.time_from IS NULL OR $4::time >= r.time_from)
-      AND (r.time_to IS NULL OR $4::time <= r.time_to)
+      AND (r.time_from IS NULL OR $4::time IS NULL OR $4::time >= r.time_from)
+      AND (r.time_to IS NULL OR $4::time IS NULL OR $4::time <= r.time_to)
       AND (r.specific_date IS NULL OR r.specific_date = $1)
-      AND (r.specific_time IS NULL OR $4::time = r.specific_time)
+      AND (r.specific_time IS NULL OR $4::time IS NULL OR $4::time = r.specific_time)
       AND (
         o.rule_type = 'dynamic_pricing'
         OR $1 > $5::date
