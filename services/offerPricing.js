@@ -1,3 +1,4 @@
+const { getTodayIST } = require('../utils/time');
 const toNumber = (value, fallback = 0) => {
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
@@ -17,7 +18,7 @@ async function applyOfferPricing({
   const normalizedSlotId = slotId == null ? null : Number(slotId);
 
   // ── Same-day blocking removed because of dynamic_pricing offers ──
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getTodayIST();
   // Same-day blocking is now handled inside offersModel.findApplicableOfferRule
   // to allow rule_type = 'dynamic_pricing' to apply on the same day.
   // ───────────────────────────────────────────────────────────────────

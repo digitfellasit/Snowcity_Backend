@@ -27,6 +27,8 @@
   get_discount_type | character varying | nullable=YES | default=null
   get_discount_value | numeric | nullable=YES | default=null
   combo_child_adjustments | jsonb | nullable=YES | default=null
+  ticket_limit | integer | nullable=YES | default=null
+  offer_price | numeric | nullable=YES | default=NULL::numeric
 
 buy_qty column exists: true
 
@@ -34,10 +36,10 @@ buy_qty column exists: true
   #46 "Buy 2 Combo Get 1 Combo Free" active=true
 
 === offer_rules for buy_x_get_y offers ===
-  rule#134 offer#46
+  rule#138 offer#46
     target=combo/0 applies_all=true
-    buy_qty=null get_qty=null
-    get_target=null/null
+    buy_qty=2 get_qty=1
+    get_target=combo/null
     discount=null/null
     day=custom days=[1]
 
@@ -46,3 +48,4 @@ buy_qty column exists: true
   #40 "Happy Hours - Weekday Mornings" type=happy_hour active=true
   #43 "Madlabs Special " type=weekday_special active=true
   #46 "Buy 2 Combo Get 1 Combo Free" type=buy_x_get_y active=true
+  #47 "Tuesday Offer  Buy any park tickets at   199   only on first 100 tickets  " type=first_n_tickets active=true

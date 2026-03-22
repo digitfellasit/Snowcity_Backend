@@ -1,5 +1,6 @@
 const { pool } = require('../config/db');
 const dynamicPricingModel = require('../models/dynamicPricing.model');
+const { getTodayIST } = require('../utils/time');
 const attractionDatePricesModel = require('../models/attractionDatePrices.model');
 const comboDatePricesModel = require('../models/comboDatePrices.model');
 
@@ -83,7 +84,7 @@ function matchesDayRule(rule, date, holidays = []) {
  */
 async function getApplicableRules({ itemType, itemId, date, time, holidays = [] }) {
   const dateStr = date.toISOString().split('T')[0];
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getTodayIST();
   const query = `
     SELECT 
       o.*,

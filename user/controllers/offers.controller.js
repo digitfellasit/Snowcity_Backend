@@ -1,4 +1,5 @@
 const offerService = require('../../services/offerService');
+const { getTodayIST } = require('../../utils/time');
 const offersModel = require('../../models/offers.model');
 
 // GET /api/offers
@@ -34,7 +35,7 @@ exports.getOfferById = async (req, res, next) => {
 exports.getOfferAvailability = async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const date = req.query.date || new Date().toISOString().slice(0, 10);
+    const date = req.query.date || getTodayIST();
     const availability = await offersModel.getOfferAvailability(id, date);
     if (!availability) {
       return res.status(404).json({ error: 'Offer not found' });

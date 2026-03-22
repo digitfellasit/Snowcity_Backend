@@ -1,4 +1,5 @@
 const { pool } = require('../config/db');
+const { getTodayIST } = require('../utils/time');
 const attractionSlotsModel = require('./attractionSlots.model');
 const comboSlotsModel = require('./comboSlots.model');
 const attractionService = require('../services/attractionService');
@@ -351,7 +352,7 @@ async function findApplicableOfferRule({
   const matchTime = time || null;
 
   // ── Same-day blocking is handled in the SQL query below ──
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getTodayIST();
   // ───────────────────────────────────────────────────────────────────
 
   // ── Dynamic Pricing Override ──────────────────────────────────────
@@ -554,7 +555,7 @@ async function findOfferSlots(offer_id, { limit = 500 } = {}) {
   const offer = await getOfferById(offer_id);
   if (!offer || !Array.isArray(offer.rules) || !offer.rules.length) return { offer, slots: [] };
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getTodayIST();
   const results = [];
   const seen = new Set();
 

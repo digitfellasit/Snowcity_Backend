@@ -1,5 +1,6 @@
 // services/bookingService.js
 const { withTransaction, pool } = require('../config/db');
+const { getTodayIST } = require('../utils/time');
 const bookingsModel = require('../models/bookings.model');
 const attractionsModel = require('../models/attractions.model');
 const addonsModel = require('../models/addons.model');
@@ -422,7 +423,7 @@ async function discountFromCoupon(coupon_code, total, onDate) {
 async function computeTotals(item = {}) {
   const item_type = item.item_type || (item.combo_id ? 'Combo' : 'Attraction');
   const qty = Math.max(1, toNumber(item.quantity ?? 1, 1));
-  const onDate = item.booking_date || new Date().toISOString().slice(0, 10);
+  const onDate = item.booking_date || getTodayIST();
 
   let baseUnit = 0;
   let slotType = null;
@@ -463,7 +464,7 @@ async function computeTotals(item = {}) {
   let offerId = initialOfferId;
 
   // Offer logic: applies for advance bookings OR same-day if rule is dynamic_pricing
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getTodayIST();
 
   // Try dynamic pricing service first
   let appliedDynamic = false;
@@ -605,7 +606,7 @@ async function createBookings(payload) {
   const processedItems = [];
   const globalCouponCode = items[0]?.coupon_code || null; // Assume single coupon for cart
   const userId = items[0]?.user_id || null;
-  const onDate = items[0]?.booking_date || new Date().toISOString().slice(0, 10);
+  const onDate = items[0]?.booking_date || getTodayIST();
 
   // Pre-calculation loop
   for (const item of items) {
