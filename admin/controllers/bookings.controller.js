@@ -220,6 +220,9 @@ exports.listBookings = async function listBookings(req, res, next) {
       LEFT JOIN attractions a1 ON a1.attraction_id = c.attraction_1_id
       LEFT JOIN attractions a2 ON a2.attraction_id = c.attraction_2_id
       LEFT JOIN offers o ON o.offer_id = b.offer_id
+      LEFT JOIN offer_rules orr ON orr.offer_id = o.offer_id AND orr.rule_id = (
+        SELECT MIN(rule_id) FROM offer_rules WHERE offer_id = o.offer_id
+      )
       LEFT JOIN orders ord ON ord.order_id = b.order_id
     `;
 
@@ -237,6 +240,17 @@ exports.listBookings = async function listBookings(req, res, next) {
         a.title AS attraction_title,
         ${comboTitleExpr} AS combo_title,
         o.title AS offer_title,
+        o.description AS offer_description,
+        o.rule_type AS offer_rule_type,
+        o.discount_type AS offer_discount_type,
+        o.discount_value AS offer_discount_value,
+        o.max_discount AS offer_max_discount,
+        CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.buy_qty ELSE NULL END AS offer_buy_qty,
+        CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_qty ELSE NULL END AS offer_get_qty,
+        CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_target_type ELSE NULL END AS offer_get_target_type,
+        CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_target_id ELSE NULL END AS offer_get_target_id,
+        CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_discount_type ELSE NULL END AS offer_get_discount_type,
+        CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_discount_value ELSE NULL END AS offer_get_discount_value,
         ${itemTitleExpr} AS item_title,
         b.ticket_status,
         b.slot_start_time,
@@ -334,6 +348,21 @@ exports.listBookings = async function listBookings(req, res, next) {
         slot_end_time: row.slot_end_time,
         slot_label: row.slot_label,
         offer_title: row.offer_title,
+        offer: row.offer_id ? {
+          offer_id: row.offer_id,
+          title: row.offer_title,
+          description: row.offer_description,
+          rule_type: row.offer_rule_type,
+          discount_type: row.offer_discount_type,
+          discount_value: row.offer_discount_value,
+          max_discount: row.offer_max_discount,
+          buy_qty: row.offer_buy_qty,
+          get_qty: row.offer_get_qty,
+          get_target_type: row.offer_get_target_type,
+          get_target_id: row.offer_get_target_id,
+          get_discount_type: row.offer_get_discount_type,
+          get_discount_value: row.offer_get_discount_value,
+        } : null,
         ticket_pdf: row.ticket_pdf,
         whatsapp_sent: row.whatsapp_sent,
         email_sent: row.email_sent,
@@ -413,6 +442,17 @@ exports.getBookingById = async function getBookingById(req, res, next) {
         ${comboTitleExpr} AS combo_title,
         ${itemTitleExpr} AS item_title,
         o2.title AS offer_title,
+        o2.description AS offer_description,
+        o2.rule_type AS offer_rule_type,
+        o2.discount_type AS offer_discount_type,
+        o2.discount_value AS offer_discount_value,
+        o2.max_discount AS offer_max_discount,
+        CASE WHEN o2.rule_type = 'buy_x_get_y' THEN orr.buy_qty ELSE NULL END AS offer_buy_qty,
+        CASE WHEN o2.rule_type = 'buy_x_get_y' THEN orr.get_qty ELSE NULL END AS offer_get_qty,
+        CASE WHEN o2.rule_type = 'buy_x_get_y' THEN orr.get_target_type ELSE NULL END AS offer_get_target_type,
+        CASE WHEN o2.rule_type = 'buy_x_get_y' THEN orr.get_target_id ELSE NULL END AS offer_get_target_id,
+        CASE WHEN o2.rule_type = 'buy_x_get_y' THEN orr.get_discount_type ELSE NULL END AS offer_get_discount_type,
+        CASE WHEN o2.rule_type = 'buy_x_get_y' THEN orr.get_discount_value ELSE NULL END AS offer_get_discount_value,
         b.slot_start_time,
         b.slot_end_time,
         b.slot_label
@@ -422,6 +462,9 @@ exports.getBookingById = async function getBookingById(req, res, next) {
       LEFT JOIN attractions a1 ON a1.attraction_id = c.attraction_1_id
       LEFT JOIN attractions a2 ON a2.attraction_id = c.attraction_2_id
       LEFT JOIN offers o2 ON o2.offer_id = b.offer_id
+      LEFT JOIN offer_rules orr ON orr.offer_id = o2.offer_id AND orr.rule_id = (
+        SELECT MIN(rule_id) FROM offer_rules WHERE offer_id = o2.offer_id
+      )
       WHERE b.order_id = $1 AND b.parent_booking_id IS NULL
       ORDER BY b.created_at ASC
     `;
@@ -472,6 +515,21 @@ exports.getBookingById = async function getBookingById(req, res, next) {
       slot_end_time: row.slot_end_time,
       slot_label: row.slot_label,
       offer_title: row.offer_title,
+      offer: row.offer_id ? {
+        offer_id: row.offer_id,
+        title: row.offer_title,
+        description: row.offer_description,
+        rule_type: row.offer_rule_type,
+        discount_type: row.offer_discount_type,
+        discount_value: row.offer_discount_value,
+        max_discount: row.offer_max_discount,
+        buy_qty: row.offer_buy_qty,
+        get_qty: row.offer_get_qty,
+        get_target_type: row.offer_get_target_type,
+        get_target_id: row.offer_get_target_id,
+        get_discount_type: row.offer_get_discount_type,
+        get_discount_value: row.offer_get_discount_value,
+      } : null,
       ticket_pdf: row.ticket_pdf,
       whatsapp_sent: row.whatsapp_sent,
       email_sent: row.email_sent,

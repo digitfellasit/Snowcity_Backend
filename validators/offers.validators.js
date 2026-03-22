@@ -4,7 +4,7 @@ const createOfferValidator = [
   body('title').isLength({ min: 2, max: 100 }),
   body('description').optional({ nullable: true }).isString(),
   body('image_url').optional({ nullable: true }).isURL(),
-  body('rule_type').optional({ nullable: true }).isIn(['holiday', 'happy_hour', 'weekday_special', 'dynamic_pricing', 'date_slot_pricing']),
+  body('rule_type').optional({ nullable: true }).isIn(['holiday', 'happy_hour', 'weekday_special', 'dynamic_pricing', 'date_slot_pricing', 'buy_x_get_y', 'first_n_tickets']),
   body('discount_type').optional().isIn(['percent', 'amount']),
   body('discount_value').optional().isFloat({ min: 0 }).toFloat(),
   body('max_discount').optional({ nullable: true }).isFloat({ min: 0 }).toFloat(),
@@ -29,13 +29,15 @@ const createOfferValidator = [
   body('rules.*.rule_discount_type').optional({ nullable: true }).isIn(['percent', 'amount']),
   body('rules.*.rule_discount_value').optional({ nullable: true }).isFloat({ min: 0 }),
   body('rules.*.priority').optional().isInt({ min: 1 }),
+  body('rules.*.ticket_limit').optional({ nullable: true }).isInt({ min: 1 }),
+  body('rules.*.offer_price').optional({ nullable: true }).isFloat({ min: 0 }),
 ];
 
 const updateOfferValidator = [param('id').isInt({ min: 1 }).toInt(), ...createOfferValidator.map((r) => r.optional())];
 
 const listOffersQuery = [
   query('active').optional().isBoolean().toBoolean(),
-  query('rule_type').optional().isIn(['holiday', 'happy_hour', 'weekday_special', 'dynamic_pricing', 'date_slot_pricing']),
+  query('rule_type').optional().isIn(['holiday', 'happy_hour', 'weekday_special', 'dynamic_pricing', 'date_slot_pricing', 'buy_x_get_y', 'first_n_tickets']),
   query('date').optional().isISO8601(),
   query('q').optional().isString().trim(),
   query('page').optional().isInt({ min: 1 }).toInt(),

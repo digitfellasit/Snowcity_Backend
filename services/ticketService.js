@@ -349,6 +349,30 @@ async function drawConsolidatedTicket(doc, data) {
       .text(ticketPriceStr, cx, nextY);
     nextY += 16;
 
+    // ── Offer details ─────────────────────────────────────────────
+    if (item.offer && item.offer.title) {
+      doc.font('Helvetica-Bold').fontSize(7).fillColor(C.veryLight)
+        .text('OFFER', cx, nextY);
+      nextY += 10;
+      doc.font('Helvetica').fontSize(8.5).fillColor(C.text)
+        .text(item.offer.title, cx, nextY, { width: cardW - 40 });
+      nextY += 12;
+
+      if (item.offer.rule_type === 'buy_x_get_y' && item.offer.buy_qty && item.offer.get_qty) {
+        const offerLine = `Buy ${item.offer.buy_qty} Get ${item.offer.get_qty} (claim at counter)`;
+        doc.font('Helvetica').fontSize(8).fillColor(C.lightText)
+          .text(offerLine, cx, nextY, { width: cardW - 40 });
+        nextY += 12;
+      } else if (item.offer.discount_type && item.offer.discount_value) {
+        const discountLabel = item.offer.discount_type === 'percent'
+          ? `${item.offer.discount_value}% off`
+          : `${money(item.offer.discount_value)} off`;
+        doc.font('Helvetica').fontSize(8).fillColor(C.lightText)
+          .text(discountLabel, cx, nextY, { width: cardW - 40 });
+        nextY += 12;
+      }
+    }
+
     // ── Add-ons ──────────────────────────────────────────────────
     if (hasAddons) {
       doc.font('Helvetica-Bold').fontSize(7).fillColor(C.veryLight)

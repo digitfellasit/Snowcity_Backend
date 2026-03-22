@@ -26,12 +26,14 @@ async function createAttraction(payload) {
     footer_schema = '',
     time_slot_enabled = true,
     stop_booking = false,
+    day_rule_type = 'all_days',
+    custom_days = [],
   } = payload;
 
   const { rows } = await pool.query(
     `INSERT INTO attractions
-     (title, slug, description, image_url, image_alt, desktop_image_url, desktop_image_alt, gallery, base_price, price_per_hour, discount_percent, active, badge, video_url, slot_capacity, meta_title, short_description, faq_items, head_schema, body_schema, footer_schema, time_slot_enabled, stop_booking)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19, $20, $21, $22, $23)
+     (title, slug, description, image_url, image_alt, desktop_image_url, desktop_image_alt, gallery, base_price, price_per_hour, discount_percent, active, badge, video_url, slot_capacity, meta_title, short_description, faq_items, head_schema, body_schema, footer_schema, time_slot_enabled, stop_booking, day_rule_type, custom_days)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19, $20, $21, $22, $23, $24, $25::integer[])
      RETURNING *`,
     [
       title,
@@ -57,6 +59,8 @@ async function createAttraction(payload) {
       footer_schema || '',
       time_slot_enabled,
       stop_booking,
+      day_rule_type,
+      custom_days || [],
     ]
   );
 
@@ -111,7 +115,7 @@ async function listAttractions({ search = '', active = null, limit = 50, offset 
   const { rows } = await pool.query(
     `SELECT attraction_id, title, slug, image_url, image_alt, desktop_image_url, desktop_image_alt,
             base_price, price_per_hour, discount_percent, active, badge, short_description,
-            stop_booking, time_slot_enabled, created_at
+            stop_booking, time_slot_enabled, day_rule_type, custom_days, created_at
      FROM attractions
      ${whereSql}
      ORDER BY 
@@ -136,7 +140,14 @@ async function updateAttraction(attraction_id, fields = {}) {
   const sets = [];
   const params = [];
   entries.forEach(([k, v], idx) => {
-    const col = (k === 'gallery' || k === 'faq_items') ? `${k} = $${idx + 1}::jsonb` : `${k} = $${idx + 1}`;
+    let col;
+    if (k === 'gallery' || k === 'faq_items') {
+      col = `${k} = $${idx + 1}::jsonb`;
+    } else if (k === 'custom_days') {
+      col = `${k} = $${idx + 1}::integer[]`;
+    } else {
+      col = `${k} = $${idx + 1}`;
+    }
     sets.push(col);
     params.push(v);
   });

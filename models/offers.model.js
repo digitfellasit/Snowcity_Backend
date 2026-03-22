@@ -55,6 +55,14 @@ function mapRule(row) {
     specific_date: row.specific_date,
     specific_time: row.specific_time,
     combo_child_adjustments: row.combo_child_adjustments,
+    buy_qty: row.buy_qty,
+    get_qty: row.get_qty,
+    get_target_type: row.get_target_type,
+    get_target_id: row.get_target_id,
+    get_discount_type: row.get_discount_type,
+    get_discount_value: row.get_discount_value != null ? Number(row.get_discount_value) : null,
+    ticket_limit: row.ticket_limit != null ? Number(row.ticket_limit) : null,
+    offer_price: row.offer_price != null ? Number(row.offer_price) : null,
     attraction_slug: row.attraction_slug,
     combo_slug: row.combo_slug,
     created_at: row.created_at,
@@ -99,6 +107,14 @@ async function replaceOfferRules(offer_id, rules = []) {
     'specific_date',
     'specific_time',
     'combo_child_adjustments',
+    'buy_qty',
+    'get_qty',
+    'get_target_type',
+    'get_target_id',
+    'get_discount_type',
+    'get_discount_value',
+    'ticket_limit',
+    'offer_price'
   ];
 
   const values = [];
@@ -127,7 +143,15 @@ async function replaceOfferRules(offer_id, rules = []) {
       !!rule?.is_holiday,
       (rule?.specific_date ?? rule?.specificDate ?? null) || null,
       (rule?.specific_time ?? rule?.specificTime ?? null) || null,
-      rule?.combo_child_adjustments ? JSON.stringify(rule.combo_child_adjustments) : null
+      rule?.combo_child_adjustments ? JSON.stringify(rule.combo_child_adjustments) : null,
+      rule?.buy_qty != null ? Number(rule.buy_qty) : null,
+      rule?.get_qty != null ? Number(rule.get_qty) : null,
+      (rule?.get_target_type ?? rule?.getTargetType ?? null) || null,
+      rule?.get_target_id ?? rule?.getTargetId ?? null,
+      (rule?.get_discount_type ?? rule?.getDiscountType ?? null) || null,
+      rule?.get_discount_value != null ? Number(rule.get_discount_value) : null,
+      rule?.ticket_limit != null ? Number(rule.ticket_limit) : null,
+      rule?.offer_price != null ? Number(rule.offer_price) : null
     );
   });
 
@@ -612,6 +636,51 @@ async function mapSlotsWithPricing(slots, offer, targetType, targetId) {
   return Promise.all(slots.map((slot) => enrichGeneratedSlotWithPricing(slot, offer, targetType)));
 }
 
+/**
+ * Count total tickets sold for a given offer on a specific date.
+ * Counts bookings with payment_status IN ('Completed', 'Pending') to prevent overselling.
+ */
+async function getOfferTicketsSold(offer_id, date) {
+  const { rows } = await pool.query(
+    `SELECT COALESCE(SUM(b.quantity), 0)::int AS tickets_sold
+     FROM bookings b
+     WHERE b.offer_id = $1
+       AND b.booking_date = $2::date
+       AND b.payment_status IN ('Completed', 'Pending')`,
+    [offer_id, date]
+  );
+  return rows[0]?.tickets_sold || 0;
+}
+
+/**
+ * Get availability info for a first_n_tickets offer on a specific date.
+ * Returns { ticket_limit, tickets_sold, tickets_remaining, is_sold_out }
+ */
+async function getOfferAvailability(offer_id, date) {
+  const offer = await getOfferById(offer_id);
+  if (!offer) return null;
+
+  // Get ticket_limit from the first rule
+  const firstRule = Array.isArray(offer.rules) && offer.rules.length > 0 ? offer.rules[0] : null;
+  const ticket_limit = firstRule?.ticket_limit || null;
+  const offer_price = firstRule?.offer_price || null;
+
+  if (!ticket_limit) {
+    return { ticket_limit: null, tickets_sold: 0, tickets_remaining: null, is_sold_out: false, offer_price };
+  }
+
+  const tickets_sold = await getOfferTicketsSold(offer_id, date);
+  const tickets_remaining = Math.max(0, ticket_limit - tickets_sold);
+
+  return {
+    ticket_limit,
+    tickets_sold,
+    tickets_remaining,
+    is_sold_out: tickets_remaining <= 0,
+    offer_price,
+  };
+}
+
 module.exports = {
   findOfferSlots,
   createOffer,
@@ -622,4 +691,6 @@ module.exports = {
   findApplicableOfferRule,
   updateOffer,
   deleteOffer,
+  getOfferTicketsSold,
+  getOfferAvailability,
 };

@@ -1,0 +1,48 @@
+=== offer_rules columns ===
+  rule_id | integer | nullable=NO | default=nextval('offer_rules_rule_id_seq'::regclass)
+  offer_id | integer | nullable=NO | default=null
+  target_type | character varying | nullable=NO | default=null
+  target_id | integer | nullable=YES | default=null
+  applies_to_all | boolean | nullable=NO | default=false
+  date_from | date | nullable=YES | default=null
+  date_to | date | nullable=YES | default=null
+  time_from | time without time zone | nullable=YES | default=null
+  time_to | time without time zone | nullable=YES | default=null
+  slot_type | character varying | nullable=YES | default=null
+  slot_id | integer | nullable=YES | default=null
+  rule_discount_type | character varying | nullable=YES | default=null
+  rule_discount_value | numeric | nullable=YES | default=null
+  priority | integer | nullable=NO | default=100
+  created_at | timestamp with time zone | nullable=NO | default=now()
+  updated_at | timestamp with time zone | nullable=NO | default=now()
+  day_type | character varying | nullable=YES | default=NULL::character varying
+  specific_days | ARRAY | nullable=YES | default=null
+  is_holiday | boolean | nullable=YES | default=false
+  specific_date | date | nullable=YES | default=null
+  specific_time | time without time zone | nullable=YES | default=null
+  buy_qty | integer | nullable=YES | default=1
+  get_qty | integer | nullable=YES | default=1
+  get_target_type | character varying | nullable=YES | default='attraction'::character varying
+  get_target_id | integer | nullable=YES | default=null
+  get_discount_type | character varying | nullable=YES | default=null
+  get_discount_value | numeric | nullable=YES | default=null
+  combo_child_adjustments | jsonb | nullable=YES | default=null
+
+buy_qty column exists: true
+
+=== buy_x_get_y offers ===
+  #46 "Buy 2 Combo Get 1 Combo Free" active=true
+
+=== offer_rules for buy_x_get_y offers ===
+  rule#134 offer#46
+    target=combo/0 applies_all=true
+    buy_qty=null get_qty=null
+    get_target=null/null
+    discount=null/null
+    day=custom days=[1]
+
+=== ALL active offers ===
+  #39 "Wednesday Offer " type=weekday_special active=true
+  #40 "Happy Hours - Weekday Mornings" type=happy_hour active=true
+  #43 "Madlabs Special " type=weekday_special active=true
+  #46 "Buy 2 Combo Get 1 Combo Free" type=buy_x_get_y active=true

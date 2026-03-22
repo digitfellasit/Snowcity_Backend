@@ -1,4 +1,5 @@
 const offerService = require('../../services/offerService');
+const offersModel = require('../../models/offers.model');
 
 // GET /api/offers
 exports.listOffers = async (req, res, next) => {
@@ -24,6 +25,21 @@ exports.getOfferById = async (req, res, next) => {
     const id = Number(req.params.id);
     const row = await offerService.getById(id);
     res.json(row);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /api/offers/:id/availability?date=YYYY-MM-DD
+exports.getOfferAvailability = async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const date = req.query.date || new Date().toISOString().slice(0, 10);
+    const availability = await offersModel.getOfferAvailability(id, date);
+    if (!availability) {
+      return res.status(404).json({ error: 'Offer not found' });
+    }
+    res.json(availability);
   } catch (err) {
     next(err);
   }

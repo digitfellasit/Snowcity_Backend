@@ -78,6 +78,14 @@ function normalizeRule(rule = {}) {
     is_holiday: !!rule.is_holiday,
     specific_date: rule.specific_date ?? rule.specificDate ?? null,
     specific_time: rule.specific_time ?? rule.specificTime ?? null,
+    buy_qty: rule.buy_qty ?? rule.buyQty ?? null,
+    get_qty: rule.get_qty ?? rule.getQty ?? null,
+    get_target_type: rule.get_target_type ?? rule.getTargetType ?? null,
+    get_target_id: rule.get_target_id ?? rule.getTargetId ?? null,
+    get_discount_type: rule.get_discount_type ?? rule.getDiscountType ?? null,
+    get_discount_value: rule.get_discount_value ?? rule.getDiscountValue ?? null,
+    ticket_limit: rule.ticket_limit ?? null,
+    offer_price: rule.offer_price ?? null,
   };
 }
 

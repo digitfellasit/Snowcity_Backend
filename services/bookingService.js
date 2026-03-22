@@ -322,14 +322,16 @@ async function priceFromCombo(combo_id) {
 async function priceFromComboSlot(combo_slot_id) {
   if (!combo_slot_id) return { slotPrice: null };
 
-  // First try to get from database
-  try {
-    const slot = await comboSlotsModel.getSlotById(combo_slot_id);
-    if (slot && slot.price != null) {
-      return { slotPrice: toNumber(slot.price, null) };
+  if (!isVirtualComboSlotId(combo_slot_id)) {
+    // First try to get from database
+    try {
+      const slot = await comboSlotsModel.getSlotById(combo_slot_id);
+      if (slot && slot.price != null) {
+        return { slotPrice: toNumber(slot.price, null) };
+      }
+    } catch (err) {
+      console.log('Combo slot not found in DB, trying dynamic generation:', err.message);
     }
-  } catch (err) {
-    console.log('Combo slot not found in DB, trying dynamic generation:', err.message);
   }
 
   // If not found in DB, try to parse virtual slot ID and generate dynamically
@@ -381,7 +383,13 @@ async function resolveSubjectIds(item = {}) {
       if (s?.attraction_id) out.attraction_id = Number(s.attraction_id);
     } catch { }
   }
-  if (type === 'Combo' && (!item.combo_id || item.combo_id === null) && item.combo_slot_id && comboSlotsModel?.getSlotById) {
+  if (
+    type === 'Combo' &&
+    (!item.combo_id || item.combo_id === null) &&
+    item.combo_slot_id &&
+    !isVirtualComboSlotId(item.combo_slot_id) &&
+    comboSlotsModel?.getSlotById
+  ) {
     try {
       const s = await comboSlotsModel.getSlotById(item.combo_slot_id);
       if (s?.combo_id) out.combo_id = Number(s.combo_id);
@@ -451,7 +459,8 @@ async function computeTotals(item = {}) {
   let unit = baseUnit;
   let unitDiscount = 0;
   let offer = null;
-  let offerId = null;
+  const initialOfferId = item.offer_id ?? item.offerId ?? null;
+  let offerId = initialOfferId;
 
   // Offer logic: applies for advance bookings OR same-day if rule is dynamic_pricing
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -517,6 +526,10 @@ async function computeTotals(item = {}) {
     unitDiscount = pricing.discount;
     offer = pricing.offer;
     offerId = pricing.offer?.offer_id || null;
+  }
+
+  if (!offerId && initialOfferId) {
+    offerId = initialOfferId;
   }
 
   const ticketsTotal = unit * qty;

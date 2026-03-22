@@ -28,6 +28,8 @@ function mapCombo(row) {
     body_schema: row.body_schema || '',
     footer_schema: row.footer_schema || '',
     stop_booking: Boolean(row.stop_booking),
+    day_rule_type: row.day_rule_type || 'all_days',
+    custom_days: row.custom_days || [],
     // Legacy fields for backward compatibility
     attraction_1_id: row.attraction_1_id,
     attraction_2_id: row.attraction_2_id,
@@ -58,7 +60,9 @@ async function createCombo({
   head_schema = '',
   body_schema = '',
   footer_schema = '',
-  stop_booking = false
+  stop_booking = false,
+  day_rule_type = 'all_days',
+  custom_days = []
 }) {
   const client = await pool.connect();
   try {
@@ -69,10 +73,10 @@ async function createCombo({
 
     // Insert combo
     const { rows } = await client.query(
-      `INSERT INTO combos (name, slug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, create_slots, meta_title, short_description, description, faq_items, head_schema, body_schema, footer_schema, stop_booking)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, $12, $13, $14, $15::jsonb, $16, $17, $18, $19)
+      `INSERT INTO combos (name, slug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, create_slots, meta_title, short_description, description, faq_items, head_schema, body_schema, footer_schema, stop_booking, day_rule_type, custom_days)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, $12, $13, $14, $15::jsonb, $16, $17, $18, $19, $20, $21::integer[])
        RETURNING *`,
-      [name, finalSlug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, meta_title, short_description, description, JSON.stringify(faq_items || []), head_schema || '', body_schema || '', footer_schema || '', stop_booking]
+      [name, finalSlug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, meta_title, short_description, description, JSON.stringify(faq_items || []), head_schema || '', body_schema || '', footer_schema || '', stop_booking, day_rule_type, custom_days || []]
     );
 
     const combo = mapCombo(rows[0]);
@@ -184,6 +188,9 @@ async function updateCombo(combo_id, fields = {}) {
         if (k === 'faq_items') {
           sets.push(`${k} = $${idx + 1}::jsonb`);
           params.push(JSON.stringify(v || []));
+        } else if (k === 'custom_days') {
+          sets.push(`${k} = $${idx + 1}::integer[]`);
+          params.push(v || []);
         } else {
           sets.push(`${k} = $${idx + 1}`);
           params.push(v);
