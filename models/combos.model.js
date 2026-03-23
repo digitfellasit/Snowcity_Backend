@@ -21,6 +21,7 @@ function mapCombo(row) {
     active: Boolean(row.active),
     create_slots: Boolean(row.create_slots),
     meta_title: row.meta_title,
+    meta_description: row.meta_description,
     short_description: row.short_description,
     description: row.description,
     faq_items: row.faq_items || [],
@@ -54,6 +55,7 @@ async function createCombo({
   discount_percent = 0,
   active = true,
   meta_title = null,
+  meta_description = null,
   short_description = null,
   description = null,
   faq_items = [],
@@ -73,10 +75,10 @@ async function createCombo({
 
     // Insert combo
     const { rows } = await client.query(
-      `INSERT INTO combos (name, slug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, create_slots, meta_title, short_description, description, faq_items, head_schema, body_schema, footer_schema, stop_booking, day_rule_type, custom_days)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, $12, $13, $14, $15::jsonb, $16, $17, $18, $19, $20, $21::integer[])
+      `INSERT INTO combos (name, slug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, create_slots, meta_title, meta_description, short_description, description, faq_items, head_schema, body_schema, footer_schema, stop_booking, day_rule_type, custom_days)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, $12, $13, $14, $15, $16::jsonb, $17, $18, $19, $20, $21, $22::integer[])
        RETURNING *`,
-      [name, finalSlug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, meta_title, short_description, description, JSON.stringify(faq_items || []), head_schema || '', body_schema || '', footer_schema || '', stop_booking, day_rule_type, custom_days || []]
+      [name, finalSlug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, meta_title, meta_description, short_description, description, JSON.stringify(faq_items || []), head_schema || '', body_schema || '', footer_schema || '', stop_booking, day_rule_type, custom_days || []]
     );
 
     const combo = mapCombo(rows[0]);

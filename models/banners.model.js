@@ -11,6 +11,8 @@ function mapBanner(row) {
     mobile_image_alt: row.mobile_image_alt,
     title: row.title,
     description: row.description,
+    cta_text: row.cta_text,
+    link_url: row.link_url,
     linked_attraction_id: row.linked_attraction_id,
     linked_offer_id: row.linked_offer_id,
     active: row.active,
@@ -26,15 +28,17 @@ async function createBanner({
   mobile_image_alt = null,
   title = null,
   description = null,
+  cta_text = null,
+  link_url = null,
   linked_attraction_id = null,
   linked_offer_id = null,
   active = true,
 }) {
   const { rows } = await pool.query(
-    `INSERT INTO banners (web_image, web_image_alt, mobile_image, mobile_image_alt, title, description, linked_attraction_id, linked_offer_id, active)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `INSERT INTO banners (web_image, web_image_alt, mobile_image, mobile_image_alt, title, description, cta_text, link_url, linked_attraction_id, linked_offer_id, active)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
-    [web_image, web_image_alt, mobile_image, mobile_image_alt, title, description, linked_attraction_id, linked_offer_id, active]
+    [web_image, web_image_alt, mobile_image, mobile_image_alt, title, description, cta_text, link_url, linked_attraction_id, linked_offer_id, active]
   );
   return mapBanner(rows[0]);
 }
@@ -72,7 +76,7 @@ async function listBanners({ active = null, attraction_id = null, offer_id = nul
   const offsetParam = paramIndex + 1;
 
   const query = `SELECT b.banner_id, b.web_image, b.web_image_alt, b.mobile_image, b.mobile_image_alt,
-                        b.title, b.description, b.linked_attraction_id, b.linked_offer_id,
+                        b.title, b.description, b.cta_text, b.link_url, b.linked_attraction_id, b.linked_offer_id,
                         b.active, b.created_at, b.updated_at
      FROM banners b
      ${whereSql}

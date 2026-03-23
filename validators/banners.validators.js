@@ -19,6 +19,15 @@ const createBannerValidator = [
     .withMessage('mobile_image must be an absolute URL or start with /uploads/'),
   body('title').optional({ nullable: true }).isLength({ min: 0, max: 100 }),
   body('description').optional({ nullable: true }).isString(),
+  body('cta_text').optional({ nullable: true }).isLength({ min: 0, max: 100 }),
+  body('link_url')
+    .optional({ nullable: true })
+    .custom((v) => {
+      if (v === undefined || v === null || v === '') return true;
+      const s = String(v);
+      return /^https?:\/\//i.test(s) || s.startsWith('/');
+    })
+    .withMessage('link_url must be an absolute URL or start with /'),
   body('linked_attraction_id').optional({ nullable: true }).isInt({ min: 1 }).toInt(),
   body('linked_offer_id').optional({ nullable: true }).isInt({ min: 1 }).toInt(),
   body('active').optional().isBoolean().toBoolean(),

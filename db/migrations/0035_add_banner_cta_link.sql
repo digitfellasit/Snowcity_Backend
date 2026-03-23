@@ -1,0 +1,7 @@
+BEGIN;
+
+ALTER TABLE banners
+  ADD COLUMN IF NOT EXISTS cta_text text,
+  ADD COLUMN IF NOT EXISTS link_url text;
+
+COMMIT;

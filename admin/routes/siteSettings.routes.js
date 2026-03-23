@@ -75,4 +75,46 @@ router.put('/seo', requirePermissions('settings:write'), async (req, res, next) 
     }
 });
 
+// ===== Page SEO CRUD =====
+const PageSeo = require('../../models/pageSeo.model');
+
+// GET — list all page_seo entries
+router.get('/page-seo', requirePermissions('settings:read'), async (req, res, next) => {
+    try {
+        const items = await PageSeo.listPageSeo();
+        res.json({ data: items });
+    } catch (err) {
+        next(err);
+    }
+});
+
+// POST — upsert a page_seo entry
+router.post('/page-seo', requirePermissions('settings:write'), async (req, res, next) => {
+    try {
+        const { slug, meta_title, meta_description } = req.body;
+        if (!slug || !slug.trim()) {
+            return res.status(400).json({ error: 'slug is required' });
+        }
+        const item = await PageSeo.upsertPageSeo({
+            slug: slug.trim().toLowerCase(),
+            meta_title: meta_title?.trim() || null,
+            meta_description: meta_description?.trim() || null,
+        });
+        res.json(item);
+    } catch (err) {
+        next(err);
+    }
+});
+
+// DELETE — delete a page_seo entry by id
+router.delete('/page-seo/:id', requirePermissions('settings:write'), async (req, res, next) => {
+    try {
+        const deleted = await PageSeo.deletePageSeo(req.params.id);
+        if (!deleted) return res.status(404).json({ error: 'Not found or cannot delete default entry' });
+        res.json({ message: 'Deleted' });
+    } catch (err) {
+        next(err);
+    }
+});
+
 module.exports = router;

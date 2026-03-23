@@ -24,6 +24,7 @@ router.use('/announcements', require('./announcements.routes'));  // No cache fo
 router.use('/pages', cachePublic(600), require('./pages.routes'));                  // 10 min
 router.use('/blogs', cachePublic(600), require('./blogs.routes'));                  // 10 min
 router.use('/banners', cachePublic(300), require('../user/routes/banners.routes')); // 5 min
+router.use('/promo-cards', cachePublic(300), require('./promoCards.routes'));       // 5 min
 router.use('/uploads', cachePublic(3600), require('./uploads.routes'));             // 1 hr
 router.use('/tickets', require('./ticketsvirtual.routes'));
 router.use('/', require('./gallery.public'));

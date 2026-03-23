@@ -19,6 +19,7 @@ async function createAttraction(payload) {
     video_url = null,
     slot_capacity = 0,
     meta_title = null,
+    meta_description = null,
     short_description = null,
     faq_items = [],
     head_schema = '',
@@ -32,8 +33,8 @@ async function createAttraction(payload) {
 
   const { rows } = await pool.query(
     `INSERT INTO attractions
-     (title, slug, description, image_url, image_alt, desktop_image_url, desktop_image_alt, gallery, base_price, price_per_hour, discount_percent, active, badge, video_url, slot_capacity, meta_title, short_description, faq_items, head_schema, body_schema, footer_schema, time_slot_enabled, stop_booking, day_rule_type, custom_days)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19, $20, $21, $22, $23, $24, $25::integer[])
+     (title, slug, description, image_url, image_alt, desktop_image_url, desktop_image_alt, gallery, base_price, price_per_hour, discount_percent, active, badge, video_url, slot_capacity, meta_title, meta_description, short_description, faq_items, head_schema, body_schema, footer_schema, time_slot_enabled, stop_booking, day_rule_type, custom_days)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20, $21, $22, $23, $24, $25, $26::integer[])
      RETURNING *`,
     [
       title,
@@ -52,6 +53,7 @@ async function createAttraction(payload) {
       video_url,
       slot_capacity,
       meta_title,
+      meta_description,
       short_description,
       JSON.stringify(faq_items || []),
       head_schema || '',

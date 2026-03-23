@@ -25,4 +25,15 @@ router.get('/seo', async (req, res, next) => {
     }
 });
 
+// GET /api/site-settings/page-seo — Public: returns all page_seo entries
+const PageSeo = require('../models/pageSeo.model');
+router.get('/page-seo', async (req, res, next) => {
+    try {
+        const items = await PageSeo.listPageSeo();
+        res.json({ data: items });
+    } catch (err) {
+        next(err);
+    }
+});
+
 module.exports = router;
