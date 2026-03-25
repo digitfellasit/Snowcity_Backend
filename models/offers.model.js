@@ -647,7 +647,7 @@ async function getOfferTicketsSold(offer_id, date) {
      FROM bookings b
      WHERE b.offer_id = $1
        AND b.booking_date = $2::date
-       AND b.payment_status IN ('Completed', 'Pending')`,
+       AND b.payment_status = 'Completed'`,
     [offer_id, date]
   );
   return rows[0]?.tickets_sold || 0;

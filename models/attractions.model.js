@@ -115,7 +115,7 @@ async function listAttractions({ search = '', active = null, limit = 50, offset 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
   const { rows } = await pool.query(
-    `SELECT attraction_id, title, slug, image_url, image_alt, desktop_image_url, desktop_image_alt,
+    `SELECT attraction_id, title, slug, description, image_url, image_alt, desktop_image_url, desktop_image_alt,
             base_price, price_per_hour, discount_percent, active, badge, short_description,
             stop_booking, time_slot_enabled, day_rule_type, custom_days, created_at
      FROM attractions

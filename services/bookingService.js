@@ -463,12 +463,48 @@ async function computeTotals(item = {}) {
   const initialOfferId = item.offer_id ?? item.offerId ?? null;
   let offerId = initialOfferId;
 
+  // ─── FIRST_N_TICKETS: dedicated handling ───
+  // If item carries an offer_id for a first_n_tickets offer, compute discount directly
+  // from the rule's offer_price instead of going through dynamic pricing service
+  let handledFirstN = false;
+  if (initialOfferId) {
+    try {
+      const { rows: offerRows } = await pool.query(
+        `SELECT o.rule_type, r.offer_price, r.ticket_limit, r.rule_id
+         FROM offers o
+         JOIN offer_rules r ON o.offer_id = r.offer_id
+         WHERE o.offer_id = $1 AND o.active = true
+         LIMIT 1`,
+        [initialOfferId]
+      );
+      const offerRow = offerRows[0];
+      if (offerRow && String(offerRow.rule_type).toLowerCase() === 'first_n_tickets' && offerRow.offer_price != null) {
+        const offerPrice = Number(offerRow.offer_price) || 0;
+        unitDiscount = Math.max(0, baseUnit - offerPrice);
+        unit = Math.max(0, baseUnit - unitDiscount);
+        offerId = initialOfferId;
+        offer = {
+          offer_id: initialOfferId,
+          title: 'First N Tickets Offer',
+          discount_value: unitDiscount,
+          rule_type: 'first_n_tickets',
+        };
+        handledFirstN = true;
+        console.log('🎫 first_n_tickets discount applied:', {
+          baseUnit, offerPrice, unitDiscount, unit, qty,
+        });
+      }
+    } catch (err) {
+      console.error('first_n_tickets lookup failed, falling back:', err);
+    }
+  }
+
   // Offer logic: applies for advance bookings OR same-day if rule is dynamic_pricing
   const todayStr = getTodayIST();
 
-  // Try dynamic pricing service first
+  // Try dynamic pricing service first (skip if first_n_tickets already handled)
   let appliedDynamic = false;
-  if (dynamicPricingService && dynamicPricingService.calculateDynamicPrice) {
+  if (!handledFirstN && dynamicPricingService && dynamicPricingService.calculateDynamicPrice) {
     try {
       // Calculate dynamic price (adjustments + discounts)
       const pricingResult = await dynamicPricingService.calculateDynamicPrice({
@@ -513,7 +549,7 @@ async function computeTotals(item = {}) {
   }
 
   // Fallback to legacy offer pricing if dynamic failed or service missing/not applied
-  if (!appliedDynamic) {
+  if (!handledFirstN && !appliedDynamic) {
     const pricing = await applyOfferPricing({
       targetType: item_type === 'Combo' ? 'combo' : 'attraction',
       targetId: item_type === 'Combo' ? item.combo_id : item.attraction_id,
@@ -851,18 +887,20 @@ async function initiatePayPhiPayment({ bookingId, email, mobile, amount: fronten
   // Generate unique merchantTxnNo for each payment attempt to avoid duplicates
   const merchantTxnNo = `${order.order_ref}_${Date.now()}`;
 
-  // Use the frontend-supplied amount as the authoritative payment amount.
-  // The frontend calculates from the same price sources and has been verified correct.
-  const amount = Number(frontendAmount);
-
-  // Log for verification / debugging
+  // Use the DB-computed final_amount as the authoritative payment amount.
+  // final_amount = GREATEST(total_amount - discount_amount, 0) — server-verified.
   const dbTotal = Number(order.total_amount || 0);
   const dbDiscount = Number(order.discount_amount || 0);
+  const dbFinal = Number(order.final_amount || 0);
+  const amount = dbFinal > 0 ? dbFinal : Number(frontendAmount);
+
+  // Log for verification / debugging
   console.log('💰 PayPhi Payment Amount:', {
-    frontendAmount: amount,
+    frontendAmount: Number(frontendAmount),
     dbTotal,
     dbDiscount,
     dbFinalAmount: order.final_amount,
+    usedAmount: amount,
     orderRef: order.order_ref,
     orderId,
   });
@@ -1058,17 +1096,20 @@ async function initiatePhonePePayment({ bookingId, email, mobile, amount: fronte
 
   const merchantTxnNo = `${order.order_ref}_${Math.floor(Date.now() / 1000)}`;
 
-  // Use the frontend-supplied amount as the authoritative payment amount.
-  const amount = Number(frontendAmount);
-
-  // Log for verification / debugging
+  // Use the DB-computed final_amount as the authoritative payment amount.
+  // final_amount = GREATEST(total_amount - discount_amount, 0) — server-verified.
   const dbTotal = Number(order.total_amount || 0);
   const dbDiscount = Number(order.discount_amount || 0);
+  const dbFinal = Number(order.final_amount || 0);
+  const amount = dbFinal > 0 ? dbFinal : Number(frontendAmount);
+
+  // Log for verification / debugging
   console.log('💰 PhonePe Payment Amount:', {
-    frontendAmount: amount,
+    frontendAmount: Number(frontendAmount),
     dbTotal,
     dbDiscount,
     dbFinalAmount: order.final_amount,
+    usedAmount: amount,
     orderRef: order.order_ref,
     orderId,
   });
