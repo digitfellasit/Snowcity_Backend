@@ -81,7 +81,7 @@ exports.createSlotsBulk = async (req, res, next) => {
   try {
     res.status(400).json({ 
       error: 'Bulk combo slot creation is no longer needed.',
-      message: 'Combo slots are generated dynamically from 10:00 AM to 8:00 PM. Duration is based on number of attractions in the combo.'
+      message: 'Combo slots are generated dynamically from 10:00 AM to 6:00 PM. Duration is based on number of attractions in the combo.'
     });
   } catch (err) {
     next(err);

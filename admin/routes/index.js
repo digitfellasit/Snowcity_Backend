@@ -42,6 +42,7 @@ router.use('/analytics', require('./analytics.routes'));
 router.use('/uploads', require('./uploads.routes'));
 router.use('/site-settings', require('./siteSettings.routes'));
 router.use('/dynamic-pricing', require('./dynamicPricing.routes'));
+router.use('/consolidated-namings', require('./consolidatedNamings.routes'));
 router.use('/attraction-date-prices', require('../../routes/attractionDatePrices.routes'));
 router.use('/combo-date-prices', require('../../routes/comboDatePrices.routes'));
 

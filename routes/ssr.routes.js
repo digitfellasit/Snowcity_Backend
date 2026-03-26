@@ -105,8 +105,8 @@ router.get('/sitemap.xml', async (req, res, next) => {
         const [blogsRes, pagesRes, attractionsRes, combosRes] = await Promise.all([
             pool.query(`SELECT slug, updated_at FROM blogs WHERE active = TRUE ORDER BY updated_at DESC`),
             pool.query(`SELECT slug, updated_at FROM cms_pages WHERE active = TRUE ORDER BY updated_at DESC`),
-            pool.query(`SELECT slug, updated_at FROM attractions WHERE active = TRUE ORDER BY updated_at DESC`).catch(() => ({ rows: [] })),
-            pool.query(`SELECT slug, updated_at FROM combos WHERE active = TRUE ORDER BY updated_at DESC`).catch(() => ({ rows: [] })),
+            pool.query(`SELECT slug, updated_at FROM attractions WHERE active = TRUE ORDER BY sort_order ASC, updated_at DESC`).catch(() => ({ rows: [] })),
+            pool.query(`SELECT slug, updated_at FROM combos WHERE active = TRUE ORDER BY sort_order ASC, updated_at DESC`).catch(() => ({ rows: [] })),
         ]);
 
         let xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -181,7 +181,7 @@ router.get('/:slug', async (req, res, next) => {
 
         // 1. Try Attraction
         const attractionRes = await pool.query(
-            `SELECT * FROM attractions WHERE active = TRUE AND LOWER(slug) = LOWER($1) LIMIT 1`,
+            `SELECT * FROM attractions WHERE active = TRUE AND LOWER(slug) = LOWER($1) ORDER BY sort_order ASC LIMIT 1`,
             [slug]
         ).catch(() => ({ rows: [] }));
         if (attractionRes.rows[0]) {
@@ -214,7 +214,7 @@ router.get('/:slug', async (req, res, next) => {
 
         // 2. Try Combo
         const comboRes = await pool.query(
-            `SELECT * FROM combos WHERE active = TRUE AND LOWER(slug) = LOWER($1) LIMIT 1`,
+            `SELECT * FROM combos WHERE active = TRUE AND LOWER(slug) = LOWER($1) ORDER BY sort_order ASC LIMIT 1`,
             [slug]
         ).catch(() => ({ rows: [] }));
         if (comboRes.rows[0]) {

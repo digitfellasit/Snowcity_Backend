@@ -80,7 +80,8 @@ exports.createCombo = async (req, res, next) => {
       footer_schema,
       stop_booking,
       day_rule_type = 'all_days',
-      custom_days = []
+      custom_days = [],
+      sort_order = 0
     } = req.body || {};
 
     console.log('Parsed data:', { name, attraction_ids, attraction_prices, total_price, image_url, discount_percent, active, create_slots });
@@ -111,7 +112,8 @@ exports.createCombo = async (req, res, next) => {
         footer_schema,
         stop_booking,
         day_rule_type,
-        custom_days
+        custom_days,
+        sort_order
       });
       console.log('Combo created successfully:', row);
       res.status(201).json(row);

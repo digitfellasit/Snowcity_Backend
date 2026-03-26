@@ -1,13 +1,14 @@
 const { pool } = require('../config/db');
 const logger = require('../config/logger');
+const { toCdn } = require('../utils/media');
 
 function mapBanner(row) {
   if (!row) return null;
   return {
     banner_id: row.banner_id,
-    web_image: row.web_image,
+    web_image: toCdn(row.web_image_url || row.web_image),
     web_image_alt: row.web_image_alt,
-    mobile_image: row.mobile_image,
+    mobile_image: toCdn(row.mobile_image_url || row.mobile_image),
     mobile_image_alt: row.mobile_image_alt,
     title: row.title,
     description: row.description,
@@ -44,7 +45,16 @@ async function createBanner({
 }
 
 async function getBannerById(banner_id) {
-  const { rows } = await pool.query(`SELECT * FROM banners WHERE banner_id = $1`, [banner_id]);
+  const { rows } = await pool.query(
+    `SELECT b.*, 
+            mw.url_path AS web_image_url, 
+            mm.url_path AS mobile_image_url
+     FROM banners b
+     LEFT JOIN media_files mw ON mw.media_id = (CASE WHEN b.web_image ~ '^[0-9]+$' THEN b.web_image::bigint ELSE NULL END)
+     LEFT JOIN media_files mm ON mm.media_id = (CASE WHEN b.mobile_image ~ '^[0-9]+$' THEN b.mobile_image::bigint ELSE NULL END)
+     WHERE b.banner_id = $1`, 
+    [banner_id]
+  );
   return mapBanner(rows[0]);
 }
 
@@ -75,10 +85,12 @@ async function listBanners({ active = null, attraction_id = null, offer_id = nul
   const limitParam = paramIndex;
   const offsetParam = paramIndex + 1;
 
-  const query = `SELECT b.banner_id, b.web_image, b.web_image_alt, b.mobile_image, b.mobile_image_alt,
-                        b.title, b.description, b.cta_text, b.link_url, b.linked_attraction_id, b.linked_offer_id,
-                        b.active, b.created_at, b.updated_at
+  const query = `SELECT b.*, 
+                        mw.url_path AS web_image_url, 
+                        mm.url_path AS mobile_image_url
      FROM banners b
+     LEFT JOIN media_files mw ON mw.media_id = (CASE WHEN b.web_image ~ '^[0-9]+$' THEN b.web_image::bigint ELSE NULL END)
+     LEFT JOIN media_files mm ON mm.media_id = (CASE WHEN b.mobile_image ~ '^[0-9]+$' THEN b.mobile_image::bigint ELSE NULL END)
      ${whereSql}
      ORDER BY b.created_at DESC
      LIMIT $${limitParam} OFFSET $${offsetParam}`;

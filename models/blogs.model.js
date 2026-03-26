@@ -1,4 +1,5 @@
 const { pool } = require('../config/db');
+const { toCdn } = require('../utils/media');
 
 function mapBlog(row) {
   if (!row) return null;
@@ -25,8 +26,8 @@ function mapBlog(row) {
       }
       return {
         media_id: item.media_id ?? item.id ?? null,
-        url: item.url ?? item.image_url ?? item.media_url ?? null,
-        thumbnail: item.thumbnail ?? item.thumb_url ?? null,
+        url: toCdn(item.url ?? item.image_url ?? item.media_url ?? null),
+        thumbnail: toCdn(item.thumbnail ?? item.thumb_url ?? null),
         title: item.title ?? null,
         description: item.description ?? null,
       };
@@ -39,8 +40,8 @@ function mapBlog(row) {
       }
       return {
         media_id: item.media_id ?? item.id ?? null,
-        url: item.url ?? item.image_url ?? item.media_url ?? null,
-        thumbnail: item.thumbnail ?? item.thumb_url ?? null,
+        url: toCdn(item.url ?? item.image_url ?? item.media_url ?? null),
+        thumbnail: toCdn(item.thumbnail ?? item.thumb_url ?? null),
         title: item.title ?? null,
         description: item.description ?? null,
       };
@@ -65,11 +66,11 @@ function mapBlog(row) {
     raw_html: row.raw_html,
     raw_css: row.raw_css,
     raw_js: row.raw_js,
-    featured_image: row.featured_image,
+    featured_image: toCdn(row.featured_image_hydrated || row.featured_image),
     image_alt: row.image_alt,
     author: row.author,
     author_description: row.author_description,
-    author_image_url: row.author_image_url,
+    author_image_url: toCdn(row.author_image_url_hydrated || row.author_image_url),
     categories: row.categories || [],
     tags: row.tags || [],
     status: row.status,
@@ -146,12 +147,30 @@ async function createBlog({
 }
 
 async function getBlogById(blog_id) {
-  const { rows } = await pool.query(`SELECT * FROM blogs WHERE blog_id = $1`, [blog_id]);
+  const { rows } = await pool.query(
+    `SELECT b.*, 
+            mf.url_path AS featured_image_hydrated,
+            ma.url_path AS author_image_url_hydrated
+     FROM blogs b
+     LEFT JOIN media_files mf ON mf.media_id = (CASE WHEN b.featured_image ~ '^[0-9]+$' THEN b.featured_image::bigint ELSE NULL END)
+     LEFT JOIN media_files ma ON ma.media_id = (CASE WHEN b.author_image_url ~ '^[0-9]+$' THEN b.author_image_url::bigint ELSE NULL END)
+     WHERE b.blog_id = $1`, 
+    [blog_id]
+  );
   return mapBlog(rows[0]);
 }
 
 async function getBlogBySlug(slug) {
-  const { rows } = await pool.query(`SELECT * FROM blogs WHERE slug = $1`, [slug]);
+  const { rows } = await pool.query(
+    `SELECT b.*, 
+            mf.url_path AS featured_image_hydrated,
+            ma.url_path AS author_image_url_hydrated
+     FROM blogs b
+     LEFT JOIN media_files mf ON mf.media_id = (CASE WHEN b.featured_image ~ '^[0-9]+$' THEN b.featured_image::bigint ELSE NULL END)
+     LEFT JOIN media_files ma ON ma.media_id = (CASE WHEN b.author_image_url ~ '^[0-9]+$' THEN b.author_image_url::bigint ELSE NULL END)
+     WHERE b.slug = $1`, 
+    [slug]
+  );
   return mapBlog(rows[0]);
 }
 
@@ -161,16 +180,16 @@ async function listBlogs({ active = null, q = '', limit = 50, offset = 0, blogId
   let i = 1;
 
   if (active != null) {
-    where.push(`active = $${i++}`);
+    where.push(`b.active = $${i++}`);
     params.push(Boolean(active));
   }
   if (q) {
-    where.push(`(title ILIKE $${i} OR slug ILIKE $${i} OR author ILIKE $${i})`);
+    where.push(`(b.title ILIKE $${i} OR b.slug ILIKE $${i} OR b.author ILIKE $${i})`);
     params.push(`%${q}%`);
     i += 1;
   }
   if (Array.isArray(blogIds) && blogIds.length) {
-    where.push(`blog_id = ANY($${i}::bigint[])`);
+    where.push(`b.blog_id = ANY($${i}::bigint[])`);
     params.push(blogIds);
     i += 1;
   }
@@ -179,15 +198,20 @@ async function listBlogs({ active = null, q = '', limit = 50, offset = 0, blogId
 
   // Use lightweight columns for list views, full columns only when content is needed
   const columns = includeContent
-    ? '*, COUNT(*) OVER() as total_count'
-    : `blog_id, title, slug, excerpt, featured_image, image_alt, author,
-       author_image_url, categories, tags, status, active,
-       published_at, created_at, updated_at, COUNT(*) OVER() as total_count`;
+    ? 'b.*, COUNT(*) OVER() as total_count'
+    : `b.blog_id, b.title, b.slug, b.excerpt, b.featured_image, b.image_alt, b.author,
+       b.author_image_url, b.categories, b.tags, b.status, b.active,
+       b.published_at, b.created_at, b.updated_at, COUNT(*) OVER() as total_count`;
 
   const { rows } = await pool.query(
-    `SELECT ${columns} FROM blogs
+    `SELECT ${columns}, 
+            mf.url_path AS featured_image_hydrated,
+            ma.url_path AS author_image_url_hydrated
+     FROM blogs b
+     LEFT JOIN media_files mf ON mf.media_id = (CASE WHEN b.featured_image ~ '^[0-9]+$' THEN b.featured_image::bigint ELSE NULL END)
+     LEFT JOIN media_files ma ON ma.media_id = (CASE WHEN b.author_image_url ~ '^[0-9]+$' THEN b.author_image_url::bigint ELSE NULL END)
      ${whereSql}
-     ORDER BY created_at DESC
+     ORDER BY COALESCE(b.published_at, b.created_at) DESC
      LIMIT $${i} OFFSET $${i + 1}`,
     [...params, limit, offset]
   );

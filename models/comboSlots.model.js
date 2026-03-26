@@ -4,7 +4,7 @@ const { pool } = require('../config/db');
 function generateDynamicComboSlots(date, combo, existingBookings = []) {
   const slots = [];
   const startHour = 10; // 10:00 AM
-  const endHour = 20;   // 8:00 PM
+  const endHour = 18;   // 6:00 PM
 
   // Calculate slot duration based on number of attractions (1 hour per attraction)
   const slotDurationHours = combo.attraction_count || 2; // Default 2 hours for combo
@@ -325,7 +325,7 @@ async function assertCapacityAndLock(client, combo_slot_id, qty = 1) {
 function generateDynamicSlotsForDateRange(comboId, startDate, endDate, slotDuration) {
   const slots = [];
   const startHour = 10; // 10:00 AM
-  const endHour = 20;   // 8:00 PM
+  const endHour = 18;   // 6:00 PM
 
   const current = new Date(startDate);
 

@@ -4,6 +4,7 @@ const attractionSlotsModel = require('./attractionSlots.model');
 const comboSlotsModel = require('./comboSlots.model');
 const attractionService = require('../services/attractionService');
 const comboService = require('../services/comboService');
+const { toCdn } = require('../utils/media');
 
 function mapOffer(row) {
   if (!row) return null;
@@ -11,7 +12,7 @@ function mapOffer(row) {
     offer_id: row.offer_id,
     title: row.title,
     description: row.description,
-    image_url: row.image_url,
+    image_url: toCdn(row.image_url_hydrated || row.image_url),
     image_alt: row.image_alt,
     rule_type: row.rule_type,
     discount_type: row.discount_type || 'percent',
@@ -20,6 +21,7 @@ function mapOffer(row) {
     valid_from: row.valid_from,
     valid_to: row.valid_to,
     active: row.active,
+    sort_order: row.sort_order || 0,
     created_at: row.created_at,
     updated_at: row.updated_at,
     rule_count: row.rule_count != null ? Number(row.rule_count) : undefined,
@@ -176,6 +178,7 @@ async function createOffer(payload = {}) {
     valid_from = null,
     valid_to = null,
     active = true,
+    sort_order = 0,
     rules = [],
   } = payload;
 
@@ -191,9 +194,10 @@ async function createOffer(payload = {}) {
         max_discount,
         valid_from,
         valid_to,
-        active
+        active,
+        sort_order
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10::date, $11)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10::date, $11, $12)
       RETURNING *`,
     [
       title,
@@ -207,6 +211,7 @@ async function createOffer(payload = {}) {
       valid_from,
       valid_to,
       active,
+      sort_order,
     ]
   );
 
@@ -224,8 +229,10 @@ async function getOfferById(offer_id) {
       CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_target_type ELSE NULL END AS get_target_type,
       CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_target_id ELSE NULL END AS get_target_id,
       CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_discount_type ELSE NULL END AS get_discount_type,
-      CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_discount_value ELSE NULL END AS get_discount_value
+      CASE WHEN o.rule_type = 'buy_x_get_y' THEN orr.get_discount_value ELSE NULL END AS get_discount_value,
+      mi.url_path AS image_url_hydrated
     FROM offers o
+    LEFT JOIN media_files mi ON mi.media_id = (CASE WHEN o.image_url ~ '^[0-9]+$' THEN o.image_url::bigint ELSE NULL END)
     LEFT JOIN offer_rules orr ON orr.offer_id = o.offer_id AND orr.rule_id = (
       SELECT MIN(rule_id) FROM offer_rules WHERE offer_id = o.offer_id
     )
@@ -265,7 +272,7 @@ async function listOffers({ active = null, rule_type = null, date = null, q = ''
   const { rows } = await pool.query(
     `SELECT o.offer_id, o.title, o.description, o.image_url, o.image_alt,
             o.rule_type, o.discount_type, o.discount_value, o.max_discount,
-            o.valid_from, o.valid_to, o.active, o.created_at, o.updated_at,
+            o.valid_from, o.valid_to, o.active, o.sort_order, o.created_at, o.updated_at,
             COALESCE(rc.cnt, 0) AS rule_count,
             -- Buy X Get Y details from first rule
             CASE WHEN o.rule_type = 'buy_x_get_y' THEN fr.buy_qty ELSE NULL END AS buy_qty,
@@ -273,8 +280,10 @@ async function listOffers({ active = null, rule_type = null, date = null, q = ''
             CASE WHEN o.rule_type = 'buy_x_get_y' THEN fr.get_target_type ELSE NULL END AS get_target_type,
             CASE WHEN o.rule_type = 'buy_x_get_y' THEN fr.get_target_id ELSE NULL END AS get_target_id,
             CASE WHEN o.rule_type = 'buy_x_get_y' THEN fr.get_discount_type ELSE NULL END AS get_discount_type,
-            CASE WHEN o.rule_type = 'buy_x_get_y' THEN fr.get_discount_value ELSE NULL END AS get_discount_value
+            CASE WHEN o.rule_type = 'buy_x_get_y' THEN fr.get_discount_value ELSE NULL END AS get_discount_value,
+            mi.url_path AS image_url_hydrated
      FROM offers o
+     LEFT JOIN media_files mi ON mi.media_id = (CASE WHEN o.image_url ~ '^[0-9]+$' THEN o.image_url::bigint ELSE NULL END)
      LEFT JOIN LATERAL (
        SELECT COUNT(*)::int AS cnt FROM offer_rules WHERE offer_id = o.offer_id
      ) rc ON true
@@ -282,7 +291,7 @@ async function listOffers({ active = null, rule_type = null, date = null, q = ''
        SELECT * FROM offer_rules WHERE offer_id = o.offer_id ORDER BY rule_id ASC LIMIT 1
      ) fr ON true
      ${whereSql}
-     ORDER BY o.created_at DESC
+     ORDER BY o.sort_order ASC, o.created_at DESC
      LIMIT $${i} OFFSET $${i + 1}`,
     [...params, limit, offset]
   );

@@ -1,6 +1,7 @@
 const { pool } = require('../config/db');
 const ComboSlotAutoService = require('../services/comboSlotAutoService');
 const { slugify } = require('../utils/slugify');
+const { toCdn } = require('../utils/media');
 
 // Helper function to map combo data
 function mapCombo(row) {
@@ -13,11 +14,12 @@ function mapCombo(row) {
     attraction_ids: row.attraction_ids || [],
     attraction_prices: row.attraction_prices || {},
     total_price: Number(row.total_price) || 0,
-    image_url: row.image_url,
+    image_url: toCdn(row.image_url_hydrated || row.image_url),
     image_alt: row.image_alt,
-    desktop_image_url: row.desktop_image_url,
+    desktop_image_url: toCdn(row.desktop_image_url_hydrated || row.desktop_image_url),
     desktop_image_alt: row.desktop_image_alt,
     discount_percent: Number(row.discount_percent) || 0,
+    sort_order: Number(row.sort_order) || 0,
     active: Boolean(row.active),
     create_slots: Boolean(row.create_slots),
     meta_title: row.meta_title,
@@ -64,7 +66,8 @@ async function createCombo({
   footer_schema = '',
   stop_booking = false,
   day_rule_type = 'all_days',
-  custom_days = []
+  custom_days = [],
+  sort_order = 0
 }) {
   const client = await pool.connect();
   try {
@@ -75,10 +78,10 @@ async function createCombo({
 
     // Insert combo
     const { rows } = await client.query(
-      `INSERT INTO combos (name, slug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, create_slots, meta_title, meta_description, short_description, description, faq_items, head_schema, body_schema, footer_schema, stop_booking, day_rule_type, custom_days)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, $12, $13, $14, $15, $16::jsonb, $17, $18, $19, $20, $21, $22::integer[])
+      `INSERT INTO combos (name, slug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, create_slots, meta_title, meta_description, short_description, description, faq_items, head_schema, body_schema, footer_schema, stop_booking, day_rule_type, custom_days, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, $12, $13, $14, $15, $16::jsonb, $17, $18, $19, $20, $21, $22::integer[], $23)
        RETURNING *`,
-      [name, finalSlug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, meta_title, meta_description, short_description, description, JSON.stringify(faq_items || []), head_schema || '', body_schema || '', footer_schema || '', stop_booking, day_rule_type, custom_days || []]
+      [name, finalSlug, attraction_ids, attraction_prices, total_price, image_url, image_alt, desktop_image_url, desktop_image_alt, discount_percent, active, meta_title, meta_description, short_description, description, JSON.stringify(faq_items || []), head_schema || '', body_schema || '', footer_schema || '', stop_booking, day_rule_type, custom_days || [], sort_order]
     );
 
     const combo = mapCombo(rows[0]);
@@ -129,8 +132,12 @@ async function createCombo({
 
 async function getComboById(combo_id) {
   const { rows } = await pool.query(
-    `SELECT cd.*
+    `SELECT cd.*,
+            mi.url_path AS image_url_hydrated,
+            md.url_path AS desktop_image_url_hydrated
      FROM combo_details cd
+     LEFT JOIN media_files mi ON mi.media_id = (CASE WHEN cd.image_url ~ '^[0-9]+$' THEN cd.image_url::bigint ELSE NULL END)
+     LEFT JOIN media_files md ON md.media_id = (CASE WHEN cd.desktop_image_url ~ '^[0-9]+$' THEN cd.desktop_image_url::bigint ELSE NULL END)
      WHERE cd.combo_id = $1`,
     [combo_id]
   );
@@ -139,8 +146,12 @@ async function getComboById(combo_id) {
 
 async function getComboBySlug(slug) {
   const { rows } = await pool.query(
-    `SELECT cd.*
+    `SELECT cd.*,
+            mi.url_path AS image_url_hydrated,
+            md.url_path AS desktop_image_url_hydrated
      FROM combo_details cd
+     LEFT JOIN media_files mi ON mi.media_id = (CASE WHEN cd.image_url ~ '^[0-9]+$' THEN cd.image_url::bigint ELSE NULL END)
+     LEFT JOIN media_files md ON md.media_id = (CASE WHEN cd.desktop_image_url ~ '^[0-9]+$' THEN cd.desktop_image_url::bigint ELSE NULL END)
      WHERE cd.slug = $1`,
     [slug]
   );
@@ -160,10 +171,15 @@ async function listCombos({ active = null, comboIds = null } = {}) {
   }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const { rows } = await pool.query(
-    `SELECT cd.*
+    `SELECT cd.*,
+            mi.url_path AS image_url_hydrated,
+            md.url_path AS desktop_image_url_hydrated
      FROM combo_details cd
+     LEFT JOIN media_files mi ON mi.media_id = (CASE WHEN cd.image_url ~ '^[0-9]+$' THEN cd.image_url::bigint ELSE NULL END)
+     LEFT JOIN media_files md ON md.media_id = (CASE WHEN cd.desktop_image_url ~ '^[0-9]+$' THEN cd.desktop_image_url::bigint ELSE NULL END)
      ${whereSql}
      ORDER BY 
+       cd.sort_order ASC,
        CASE 
          WHEN cd.name ILIKE '%Snow Park%' OR cd.name ILIKE '%Snow City%' THEN 1 
          WHEN cd.name ILIKE '%Mad Lab%' THEN 2 

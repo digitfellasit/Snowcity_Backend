@@ -1,30 +1,38 @@
 const { pool } = require('../config/db');
 const logger = require('../config/logger');
+const { toCdn } = require('../utils/media');
 
 function mapPromoCard(row) {
   if (!row) return null;
   return {
     id: row.id,
-    image_url: row.image_url,
+    image_url: toCdn(row.image_url_hydrated || row.image_url),
     link_url: row.link_url,
     active: row.active,
+    sort_order: row.sort_order || 0,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
 }
 
-async function createPromoCard({ image_url, link_url, active = true }) {
+async function createPromoCard({ image_url, link_url, active = true, sort_order = 0 }) {
   const { rows } = await pool.query(
-    `INSERT INTO promo_cards (image_url, link_url, active)
-     VALUES ($1, $2, $3)
+    `INSERT INTO promo_cards (image_url, link_url, active, sort_order)
+     VALUES ($1, $2, $3, $4)
      RETURNING *`,
-    [image_url, link_url, active]
+    [image_url, link_url, active, sort_order]
   );
   return mapPromoCard(rows[0]);
 }
 
 async function getPromoCardById(id) {
-  const { rows } = await pool.query(`SELECT * FROM promo_cards WHERE id = $1`, [id]);
+  const { rows } = await pool.query(
+    `SELECT pc.*, mi.url_path AS image_url_hydrated
+     FROM promo_cards pc
+     LEFT JOIN media_files mi ON mi.media_id = (CASE WHEN pc.image_url ~ '^[0-9]+$' THEN pc.image_url::bigint ELSE NULL END)
+     WHERE pc.id = $1`, 
+    [id]
+  );
   return mapPromoCard(rows[0]);
 }
 
@@ -45,14 +53,19 @@ async function listPromoCards({ active = null, limit = 50, offset = 0 } = {}) {
   const limitParam = paramIndex;
   const offsetParam = paramIndex + 1;
 
-  const query = `SELECT * FROM promo_cards ${whereSql} ORDER BY created_at DESC LIMIT $${limitParam} OFFSET $${offsetParam}`;
+  const query = `SELECT pc.*, mi.url_path AS image_url_hydrated 
+                 FROM promo_cards pc
+                 LEFT JOIN media_files mi ON mi.media_id = (CASE WHEN pc.image_url ~ '^[0-9]+$' THEN pc.image_url::bigint ELSE NULL END)
+                 ${whereSql.replace(/active/g, 'pc.active')} 
+                 ORDER BY pc.sort_order ASC, pc.created_at DESC 
+                 LIMIT $${limitParam} OFFSET $${offsetParam}`;
   
   const { rows } = await pool.query(query, params);
   return rows.map(mapPromoCard);
 }
 
 async function updatePromoCard(id, fields = {}) {
-  const entries = Object.entries(fields).filter(([k, v]) => v !== undefined && ['image_url', 'link_url', 'active'].includes(k));
+  const entries = Object.entries(fields).filter(([k, v]) => v !== undefined && ['image_url', 'link_url', 'active', 'sort_order'].includes(k));
   if (!entries.length) return getPromoCardById(id);
 
   const sets = [];

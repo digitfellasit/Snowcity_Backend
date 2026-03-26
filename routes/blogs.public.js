@@ -25,7 +25,7 @@ router.get('/blogs', async (req, res, next) => {
               COUNT(*) OVER() as total_count
        FROM blogs b
        ${whereSql}
-       ORDER BY created_at ASC
+       ORDER BY COALESCE(created_at, NOW()) DESC
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, limit, offset]
     );

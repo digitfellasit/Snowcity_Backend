@@ -15,8 +15,15 @@ const s3 = new S3Client({
   },
 });
 
+const CLOUDFRONT = process.env.CLOUDFRONT_DOMAIN;
+const S3_DOMAIN = `${BUCKET}.s3.${REGION}.amazonaws.com`;
+
 function getPublicUrl(key) {
-  return `https://${BUCKET}.s3.${REGION}.amazonaws.com/${encodeURI(key)}`;
+  const url = `https://${S3_DOMAIN}/${encodeURI(key)}`;
+  if (CLOUDFRONT) {
+    return url.replace(S3_DOMAIN, CLOUDFRONT);
+  }
+  return url;
 }
 
 /**

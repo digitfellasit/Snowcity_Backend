@@ -1,5 +1,6 @@
 const { pool } = require('../config/db');
 const AttractionSlotAutoService = require('../services/attractionSlotAutoService');
+const { toCdn } = require('../utils/media');
 
 async function createAttraction(payload) {
   const {
@@ -29,12 +30,13 @@ async function createAttraction(payload) {
     stop_booking = false,
     day_rule_type = 'all_days',
     custom_days = [],
+    sort_order = 0,
   } = payload;
 
   const { rows } = await pool.query(
     `INSERT INTO attractions
-     (title, slug, description, image_url, image_alt, desktop_image_url, desktop_image_alt, gallery, base_price, price_per_hour, discount_percent, active, badge, video_url, slot_capacity, meta_title, meta_description, short_description, faq_items, head_schema, body_schema, footer_schema, time_slot_enabled, stop_booking, day_rule_type, custom_days)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20, $21, $22, $23, $24, $25, $26::integer[])
+     (title, slug, description, image_url, image_alt, desktop_image_url, desktop_image_alt, gallery, base_price, price_per_hour, discount_percent, active, badge, video_url, slot_capacity, meta_title, meta_description, short_description, faq_items, head_schema, body_schema, footer_schema, time_slot_enabled, stop_booking, day_rule_type, custom_days, sort_order)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20, $21, $22, $23, $24, $25, $26::integer[], $27)
      RETURNING *`,
     [
       title,
@@ -63,6 +65,7 @@ async function createAttraction(payload) {
       stop_booking,
       day_rule_type,
       custom_days || [],
+      sort_order,
     ]
   );
 
@@ -83,13 +86,47 @@ async function createAttraction(payload) {
 }
 
 async function getAttractionById(attraction_id) {
-  const { rows } = await pool.query(`SELECT * FROM attractions WHERE attraction_id = $1`, [attraction_id]);
-  return rows[0] || null;
+  const { rows } = await pool.query(
+    `SELECT a.*, 
+            mi.url_path AS image_url_hydrated, 
+            md.url_path AS desktop_image_url_hydrated
+     FROM attractions a
+     LEFT JOIN media_files mi ON mi.media_id = (CASE WHEN a.image_url ~ '^[0-9]+$' THEN a.image_url::bigint ELSE NULL END)
+     LEFT JOIN media_files md ON md.media_id = (CASE WHEN a.desktop_image_url ~ '^[0-9]+$' THEN a.desktop_image_url::bigint ELSE NULL END)
+     WHERE a.attraction_id = $1`, 
+    [attraction_id]
+  );
+  if (!rows[0]) return null;
+  const attr = rows[0];
+  if (attr.image_url_hydrated) attr.image_url = attr.image_url_hydrated;
+  if (attr.desktop_image_url_hydrated) attr.desktop_image_url = attr.desktop_image_url_hydrated;
+
+  attr.image_url = toCdn(attr.image_url);
+  attr.desktop_image_url = toCdn(attr.desktop_image_url);
+
+  return attr;
 }
 
 async function getAttractionBySlug(slug) {
-  const { rows } = await pool.query(`SELECT * FROM attractions WHERE slug = $1`, [slug]);
-  return rows[0] || null;
+  const { rows } = await pool.query(
+    `SELECT a.*, 
+            mi.url_path AS image_url_hydrated, 
+            md.url_path AS desktop_image_url_hydrated
+     FROM attractions a
+     LEFT JOIN media_files mi ON mi.media_id = (CASE WHEN a.image_url ~ '^[0-9]+$' THEN a.image_url::bigint ELSE NULL END)
+     LEFT JOIN media_files md ON md.media_id = (CASE WHEN a.desktop_image_url ~ '^[0-9]+$' THEN a.desktop_image_url::bigint ELSE NULL END)
+     WHERE a.slug = $1`, 
+    [slug]
+  );
+  if (!rows[0]) return null;
+  const attr = rows[0];
+  if (attr.image_url_hydrated) attr.image_url = attr.image_url_hydrated;
+  if (attr.desktop_image_url_hydrated) attr.desktop_image_url = attr.desktop_image_url_hydrated;
+
+  attr.image_url = toCdn(attr.image_url);
+  attr.desktop_image_url = toCdn(attr.desktop_image_url);
+
+  return attr;
 }
 
 async function listAttractions({ search = '', active = null, limit = 50, offset = 0, attractionIds = null } = {}) {
@@ -103,34 +140,46 @@ async function listAttractions({ search = '', active = null, limit = 50, offset 
     i += 1;
   }
   if (active != null) {
-    where.push(`active = $${i}`);
+    where.push(`a.active = $${i}`);
     params.push(Boolean(active));
     i += 1;
   }
   if (Array.isArray(attractionIds) && attractionIds.length) {
-    where.push(`attraction_id = ANY($${i}::bigint[])`);
+    where.push(`a.attraction_id = ANY($${i}::bigint[])`);
     params.push(attractionIds);
     i += 1;
   }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
   const { rows } = await pool.query(
-    `SELECT attraction_id, title, slug, description, image_url, image_alt, desktop_image_url, desktop_image_alt,
-            base_price, price_per_hour, discount_percent, active, badge, short_description,
-            stop_booking, time_slot_enabled, day_rule_type, custom_days, created_at
-     FROM attractions
+    `SELECT a.attraction_id, a.title, a.slug, a.description, 
+            COALESCE(mi.url_path, a.image_url) AS image_url, 
+            a.image_alt, 
+            COALESCE(md.url_path, a.desktop_image_url) AS desktop_image_url, 
+            a.desktop_image_alt,
+            a.base_price, a.sort_order, a.price_per_hour, a.discount_percent, a.active, a.badge, a.short_description,
+            a.stop_booking, a.time_slot_enabled, a.day_rule_type, a.custom_days, a.created_at
+     FROM attractions a
+     LEFT JOIN media_files mi ON mi.media_id = (CASE WHEN a.image_url ~ '^[0-9]+$' THEN a.image_url::bigint ELSE NULL END)
+     LEFT JOIN media_files md ON md.media_id = (CASE WHEN a.desktop_image_url ~ '^[0-9]+$' THEN a.desktop_image_url::bigint ELSE NULL END)
      ${whereSql}
      ORDER BY 
+       a.sort_order ASC,
        CASE 
-         WHEN title ILIKE '%Snow Park%' OR title ILIKE '%Snow City%' THEN 1 
-         WHEN title ILIKE '%Mad Lab%' THEN 2 
+         WHEN a.title ILIKE '%Snow Park%' OR a.title ILIKE '%Snow City%' THEN 1 
+         WHEN a.title ILIKE '%Mad Lab%' THEN 2 
          ELSE 3 
        END, 
-       created_at ASC
+       a.created_at ASC
      LIMIT $${i} OFFSET $${i + 1}`,
     [...params, limit, offset]
   );
-  return rows;
+
+  return rows.map(r => ({
+    ...r,
+    image_url: toCdn(r.image_url),
+    desktop_image_url: toCdn(r.desktop_image_url)
+  }));
 }
 
 async function updateAttraction(attraction_id, fields = {}) {

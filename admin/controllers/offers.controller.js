@@ -103,6 +103,7 @@ function normalizePayload(body = {}) {
     active,
     announcement,
     announcement_active,
+    sort_order,
     rules,
   } = body;
 
@@ -117,6 +118,7 @@ function normalizePayload(body = {}) {
     valid_from,
     valid_to,
     active,
+    sort_order,
     rules: Array.isArray(rules) ? rules.map(normalizeRule) : [],
   };
 }

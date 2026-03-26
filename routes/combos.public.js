@@ -10,7 +10,7 @@ router.get('/combos', async (req, res, next) => {
     const active = String(req.query.active || '').toLowerCase() === 'true';
     const sql = `
       SELECT
-        c.combo_id, c.combo_price, c.discount_percent, c.active, c.created_at, c.updated_at,
+        c.combo_id, c.combo_price, c.discount_percent, c.active, c.created_at, c.updated_at, c.sort_order,
         a1.attraction_id AS attraction_1_id, a2.attraction_id AS attraction_2_id,
         a1.title AS attraction_1_title, a2.title AS attraction_2_title,
         a1.image_url AS attraction_1_image, a2.image_url AS attraction_2_image,
@@ -19,7 +19,7 @@ router.get('/combos', async (req, res, next) => {
       JOIN attractions a1 ON a1.attraction_id = c.attraction_1_id
       JOIN attractions a2 ON a2.attraction_id = c.attraction_2_id
       ${active ? 'WHERE c.active = TRUE' : ''}
-      ORDER BY c.combo_id DESC
+      ORDER BY c.sort_order ASC, c.combo_id DESC
     `;
     const { rows } = await pool.query(sql);
     res.json(rows);
