@@ -596,16 +596,21 @@ async function getDetailedDailyAnalytics({ from = null, to = null, attraction_id
 // Everything is based on booking_date (visit date).
 // Combo revenue is attributed to child attractions.
 // Add-on revenue is separated into non-ticketing.
-async function getOpsDashboardStats({ from, to }) {
+async function getOpsDashboardStats({ from, to, attraction_ids = null }) {
   const dateCond = from && to
     ? `BETWEEN $1::date AND $2::date`
     : `= CURRENT_DATE`;
   const params = from && to ? [from, to] : [];
 
+  // Build optional attraction scope filter
+  let attractionFilter = '';
+  if (Array.isArray(attraction_ids) && attraction_ids.length > 0) {
+    const paramIdx = params.length + 1;
+    params.push(attraction_ids);
+    attractionFilter = ` AND b.attraction_id = ANY($${paramIdx}::bigint[])`;
+  }
+
   // §1 VISITOR SUMMARY — Use child bookings for per-attraction guest counts
-  // Child bookings (parent_booking_id IS NOT NULL) have individual attraction_id
-  // Parent combo bookings only have combo_id, so we use children for split
-  // For total guests, we use parent bookings (parent_booking_id IS NULL) to avoid double counting
   const visitorSql = `
     WITH child_guests AS (
       SELECT
@@ -617,6 +622,7 @@ async function getOpsDashboardStats({ from, to }) {
         AND b.payment_status = 'Completed'
         AND b.parent_booking_id IS NOT NULL
         AND b.booking_date ${dateCond}
+        ${attractionFilter}
       GROUP BY a.title
     ),
     standalone_guests AS (
@@ -630,6 +636,7 @@ async function getOpsDashboardStats({ from, to }) {
         AND b.parent_booking_id IS NULL
         AND b.item_type = 'Attraction'
         AND b.booking_date ${dateCond}
+        ${attractionFilter}
       GROUP BY a.title
     ),
     total AS (
@@ -640,6 +647,7 @@ async function getOpsDashboardStats({ from, to }) {
         -- Count all entries (standalone + combo children)
         AND (b.parent_booking_id IS NULL AND b.item_type = 'Attraction' OR b.parent_booking_id IS NOT NULL)
         AND b.booking_date ${dateCond}
+        ${attractionFilter}
     ),
     merged AS (
       SELECT title, SUM(guests) AS guests FROM (
@@ -657,8 +665,6 @@ async function getOpsDashboardStats({ from, to }) {
   `;
 
   // §2 REVENUE SUMMARY — Based on booking_date (visit date)
-  // Ticketing = booking final_amount MINUS add-on prices (since total_amount includes addons)
-  // Non-Ticketing (Add-ons) = sum from booking_addons table
   const revenueSql = `
     WITH booking_totals AS (
       SELECT
@@ -668,6 +674,7 @@ async function getOpsDashboardStats({ from, to }) {
         AND b.payment_status = 'Completed'
         AND b.parent_booking_id IS NULL
         AND b.booking_date ${dateCond}
+        ${attractionFilter}
     ),
     addon_totals AS (
       SELECT
@@ -678,6 +685,7 @@ async function getOpsDashboardStats({ from, to }) {
         AND b.payment_status = 'Completed'
         AND b.parent_booking_id IS NULL
         AND b.booking_date ${dateCond}
+        ${attractionFilter}
     )
     SELECT
       bt.grand_total - at.addon_total AS total_ticketing,
@@ -687,8 +695,6 @@ async function getOpsDashboardStats({ from, to }) {
   `;
 
   // §3 ATTRACTION BREAKDOWN — Include combo child bookings per attraction
-  // Uses children (parent_booking_id IS NOT NULL) for combo attractions
-  // + standalone attraction bookings (parent_booking_id IS NULL, item_type = 'Attraction')
   const attractionBreakdownSql = `
     WITH all_attraction_bookings AS (
       -- Standalone attraction bookings
@@ -700,6 +706,7 @@ async function getOpsDashboardStats({ from, to }) {
         AND b.parent_booking_id IS NULL
         AND b.item_type = 'Attraction'
         AND b.booking_date ${dateCond}
+        ${attractionFilter}
       UNION ALL
       -- Combo child bookings (attributed to each attraction)
       SELECT b.quantity, COALESCE(b.final_amount, b.total_amount, 0) AS revenue, a.title
@@ -709,6 +716,7 @@ async function getOpsDashboardStats({ from, to }) {
         AND b.payment_status = 'Completed'
         AND b.parent_booking_id IS NOT NULL
         AND b.booking_date ${dateCond}
+        ${attractionFilter}
     )
     SELECT
       title,
@@ -731,6 +739,7 @@ async function getOpsDashboardStats({ from, to }) {
       AND b.payment_status = 'Completed'
       AND b.parent_booking_id IS NULL
       AND b.booking_date ${dateCond}
+      ${attractionFilter}
   `;
 
   // Transaction breakdown by attraction (visit date based)
@@ -744,6 +753,7 @@ async function getOpsDashboardStats({ from, to }) {
         AND b.parent_booking_id IS NULL
         AND b.item_type = 'Attraction'
         AND b.booking_date ${dateCond}
+        ${attractionFilter}
       UNION ALL
       SELECT b.booking_id, b.parent_booking_id, b.quantity, COALESCE(b.final_amount, b.total_amount, 0) AS value, a.title
       FROM bookings b
@@ -752,6 +762,7 @@ async function getOpsDashboardStats({ from, to }) {
         AND b.payment_status = 'Completed'
         AND b.parent_booking_id IS NOT NULL
         AND b.booking_date ${dateCond}
+        ${attractionFilter}
     )
     SELECT
       title,
@@ -834,11 +845,19 @@ module.exports = {
 
 // ─── TRANSACTION REPORT ───
 // Returns individual booking line items for the report table
-async function getTransactionReport({ from, to, type = 'both' }) {
+async function getTransactionReport({ from, to, type = 'both', attraction_ids = null }) {
   const dateCond = from && to
     ? `BETWEEN $1::date AND $2::date`
     : `= CURRENT_DATE`;
   const params = from && to ? [from, to] : [];
+
+  // Build optional attraction scope filter
+  let attractionFilter = '';
+  if (Array.isArray(attraction_ids) && attraction_ids.length > 0) {
+    const paramIdx = params.length + 1;
+    params.push(attraction_ids);
+    attractionFilter = ` AND b.attraction_id = ANY($${paramIdx}::bigint[])`;
+  }
 
   let sql;
   if (type === 'addons') {
@@ -863,6 +882,7 @@ async function getTransactionReport({ from, to, type = 'both' }) {
         AND b.payment_status = 'Completed'
         AND b.parent_booking_id IS NULL
         AND b.booking_date ${dateCond}
+        ${attractionFilter}
       ORDER BY b.created_at DESC
     `;
   } else if (type === 'ticketing') {
@@ -894,6 +914,7 @@ async function getTransactionReport({ from, to, type = 'both' }) {
         AND b.payment_status = 'Completed'
         AND (b.parent_booking_id IS NULL AND b.item_type = 'Attraction' OR b.parent_booking_id IS NOT NULL)
         AND b.booking_date ${dateCond}
+        ${attractionFilter}
       ORDER BY b.created_at DESC
     `;
   } else {
@@ -926,6 +947,7 @@ async function getTransactionReport({ from, to, type = 'both' }) {
           AND b.payment_status = 'Completed'
           AND (b.parent_booking_id IS NULL AND b.item_type = 'Attraction' OR b.parent_booking_id IS NOT NULL)
           AND b.booking_date ${dateCond}
+          ${attractionFilter}
       )
       UNION ALL
       (
@@ -948,6 +970,7 @@ async function getTransactionReport({ from, to, type = 'both' }) {
           AND b.payment_status = 'Completed'
           AND b.parent_booking_id IS NULL
           AND b.booking_date ${dateCond}
+          ${attractionFilter}
       )
       ORDER BY created_at DESC
     `;
@@ -988,13 +1011,22 @@ async function getTransactionReport({ from, to, type = 'both' }) {
   };
 }
 
+
 // ─── GUEST REPORT ───
 // Returns per-date guest count breakdown by attraction
-async function getGuestReport({ from, to }) {
+async function getGuestReport({ from, to, attraction_ids = null }) {
   const dateCond = from && to
     ? `BETWEEN $1::date AND $2::date`
     : `= CURRENT_DATE`;
   const params = from && to ? [from, to] : [];
+
+  // Build optional attraction scope filter
+  let attractionFilter = '';
+  if (Array.isArray(attraction_ids) && attraction_ids.length > 0) {
+    const paramIdx = params.length + 1;
+    params.push(attraction_ids);
+    attractionFilter = ` AND b.attraction_id = ANY($${paramIdx}::bigint[])`;
+  }
 
   const sql = `
     WITH child_guests AS (
@@ -1009,6 +1041,7 @@ async function getGuestReport({ from, to }) {
         AND b.payment_status = 'Completed'
         AND b.parent_booking_id IS NOT NULL
         AND b.booking_date ${dateCond}
+        ${attractionFilter}
       GROUP BY b.booking_date, a.title
     ),
     standalone_guests AS (
@@ -1024,6 +1057,7 @@ async function getGuestReport({ from, to }) {
         AND b.parent_booking_id IS NULL
         AND b.item_type = 'Attraction'
         AND b.booking_date ${dateCond}
+        ${attractionFilter}
       GROUP BY b.booking_date, a.title
     ),
     addon_counts AS (
@@ -1036,6 +1070,7 @@ async function getGuestReport({ from, to }) {
         AND b.payment_status = 'Completed'
         AND b.parent_booking_id IS NULL
         AND b.booking_date ${dateCond}
+        ${attractionFilter}
       GROUP BY b.booking_date
     ),
     daily_totals AS (
@@ -1048,6 +1083,7 @@ async function getGuestReport({ from, to }) {
         AND b.payment_status = 'Completed'
         AND b.parent_booking_id IS NULL
         AND b.booking_date ${dateCond}
+        ${attractionFilter}
       GROUP BY b.booking_date
     ),
     merged AS (
@@ -1056,9 +1092,10 @@ async function getGuestReport({ from, to }) {
       GROUP BY booking_date, title
     ),
     dates AS (
-      SELECT DISTINCT booking_date FROM bookings
-      WHERE booking_status <> 'Cancelled' AND payment_status = 'Completed'
-        AND booking_date ${dateCond}
+      SELECT DISTINCT b.booking_date FROM bookings b
+      WHERE b.booking_status <> 'Cancelled' AND b.payment_status = 'Completed'
+        AND b.booking_date ${dateCond}
+        ${attractionFilter}
     )
     SELECT
       d.booking_date,

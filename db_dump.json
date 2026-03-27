@@ -1,0 +1,189 @@
+[
+  {
+    "user_id": "42",
+    "resource_type": "attraction",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "42",
+    "resource_type": "banner",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "42",
+    "resource_type": "blog",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "42",
+    "resource_type": "combo",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "42",
+    "resource_type": "gallery",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "42",
+    "resource_type": "page",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "44",
+    "resource_type": "attraction",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "44",
+    "resource_type": "banner",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "44",
+    "resource_type": "blog",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "44",
+    "resource_type": "combo",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "44",
+    "resource_type": "gallery",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "44",
+    "resource_type": "page",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "66",
+    "resource_type": "modules",
+    "resource_id": "0",
+    "module_permissions": [
+      "bookings",
+      "reports"
+    ]
+  },
+  {
+    "user_id": "68",
+    "resource_type": "modules",
+    "resource_id": "0",
+    "module_permissions": [
+      "bookings",
+      "reports"
+    ]
+  },
+  {
+    "user_id": "69",
+    "resource_type": "modules",
+    "resource_id": "0",
+    "module_permissions": [
+      "dashboard",
+      "analytics",
+      "reports",
+      "bookings"
+    ]
+  },
+  {
+    "user_id": "99",
+    "resource_type": "modules",
+    "resource_id": "0",
+    "module_permissions": [
+      "dashboard",
+      "analytics",
+      "reports",
+      "bookings"
+    ]
+  },
+  {
+    "user_id": "240",
+    "resource_type": "attraction",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "240",
+    "resource_type": "banner",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "240",
+    "resource_type": "blog",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "240",
+    "resource_type": "combo",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "240",
+    "resource_type": "gallery",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "240",
+    "resource_type": "page",
+    "resource_id": "0",
+    "module_permissions": []
+  },
+  {
+    "user_id": "246",
+    "resource_type": "attraction",
+    "resource_id": "-1",
+    "module_permissions": []
+  },
+  {
+    "user_id": "246",
+    "resource_type": "combo",
+    "resource_id": "-1",
+    "module_permissions": []
+  },
+  {
+    "user_id": "246",
+    "resource_type": "modules",
+    "resource_id": "0",
+    "module_permissions": [
+      "analytics",
+      "bookings",
+      "reports",
+      "dashboard"
+    ]
+  },
+  {
+    "user_id": "407",
+    "resource_type": "attraction",
+    "resource_id": "21",
+    "module_permissions": []
+  },
+  {
+    "user_id": "407",
+    "resource_type": "modules",
+    "resource_id": "0",
+    "module_permissions": [
+      "dashboard",
+      "analytics",
+      "reports"
+    ]
+  }
+]

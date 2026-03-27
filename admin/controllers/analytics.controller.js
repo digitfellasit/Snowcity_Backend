@@ -78,8 +78,11 @@ exports.getTopAttractions = async (req, res, next) => {
 exports.getOpsDashboard = async (req, res, next) => {
   try {
     const { from = null, to = null } = req.query;
-    // We are currently ignoring scopes for Ops Dashboard specifically since it's a global counter overview
-    const data = await adminModel.getOpsDashboardStats({ from, to });
+    // Apply attraction scope for subadmins
+    const scopes = req.user.scopes || {};
+    const attractionScope = scopes.attraction || [];
+    const attractionIds = attractionScope.includes('*') ? null : (attractionScope.length ? attractionScope : null);
+    const data = await adminModel.getOpsDashboardStats({ from, to, attraction_ids: attractionIds });
     res.json(data);
   } catch (err) {
     next(err);
@@ -90,7 +93,11 @@ exports.getOpsDashboard = async (req, res, next) => {
 exports.getTransactionReport = async (req, res, next) => {
   try {
     const { from = null, to = null, type = 'both' } = req.query;
-    const data = await adminModel.getTransactionReport({ from, to, type });
+    // Apply attraction scope for subadmins
+    const scopes = req.user.scopes || {};
+    const attractionScope = scopes.attraction || [];
+    const attractionIds = attractionScope.includes('*') ? null : (attractionScope.length ? attractionScope : null);
+    const data = await adminModel.getTransactionReport({ from, to, type, attraction_ids: attractionIds });
     res.json(data);
   } catch (err) {
     next(err);
@@ -101,7 +108,11 @@ exports.getTransactionReport = async (req, res, next) => {
 exports.getGuestReport = async (req, res, next) => {
   try {
     const { from = null, to = null } = req.query;
-    const data = await adminModel.getGuestReport({ from, to });
+    // Apply attraction scope for subadmins
+    const scopes = req.user.scopes || {};
+    const attractionScope = scopes.attraction || [];
+    const attractionIds = attractionScope.includes('*') ? null : (attractionScope.length ? attractionScope : null);
+    const data = await adminModel.getGuestReport({ from, to, attraction_ids: attractionIds });
     res.json(data);
   } catch (err) {
     next(err);
