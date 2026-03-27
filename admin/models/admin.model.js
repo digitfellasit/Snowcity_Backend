@@ -402,16 +402,27 @@ async function getDetailedDailyAnalytics({ from = null, to = null, attraction_id
   let scopeParams = [];
   let paramIndex = 1;
 
+  let scopeConditions = [];
+
   if (!attractionScope.includes('*') && attractionScope.length > 0) {
-    scopeWhere += ` AND b.attraction_id = ANY($${paramIndex}::bigint[])`;
+    scopeConditions.push(`b.attraction_id = ANY($${paramIndex}::bigint[])`);
     scopeParams.push(attractionScope);
     paramIndex++;
   }
 
   if (!comboScope.includes('*') && comboScope.length > 0) {
-    scopeWhere += ` AND b.combo_id = ANY($${paramIndex}::bigint[])`;
+    scopeConditions.push(`b.combo_id = ANY($${paramIndex}::bigint[])`);
     scopeParams.push(comboScope);
     paramIndex++;
+  }
+
+  if (scopeConditions.length > 0) {
+    scopeWhere += ` AND (${scopeConditions.join(' OR ')})`;
+  } else if (!attractionScope.includes('*') || !comboScope.includes('*')) {
+    // If not full access but scopes are empty, they have no data access
+    if (attractionScope.length === 0 && comboScope.length === 0) {
+      scopeWhere += ` AND 1=0`;
+    }
   }
 
   // If specific attraction/combo requested, add filters
