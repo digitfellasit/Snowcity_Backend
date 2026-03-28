@@ -1,11 +1,12 @@
 const payphi = require('../config/payphi');
 
-async function initiate({ merchantTxnNo, amount, customerEmailID, customerMobileNo, addlParam1 = '', addlParam2 = '' }) {
+async function initiate({ merchantTxnNo, amount, customerEmailID, customerMobileNo, customerName = '', addlParam1 = '', addlParam2 = '' }) {
   const data = await payphi.initiateSale({
     merchantTxnNo,
     amount: Number(amount).toFixed(2),
     customerEmailID,
     customerMobileNo,
+    customerName,
     addlParam1,
     addlParam2,
   });

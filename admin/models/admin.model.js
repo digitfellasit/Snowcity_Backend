@@ -676,14 +676,20 @@ async function getOpsDashboardStats({ from, to, attraction_ids = null }) {
   `;
 
   // §2 REVENUE SUMMARY — Based on booking_date (visit date)
+  // Fix: For scoped users, we must sum revenue from standalone and combo children (distributed revenue)
+  // instead of just parent bookings which filter out combos.
   const revenueSql = `
-    WITH booking_totals AS (
+    WITH ticketing_totals AS (
       SELECT
-        COALESCE(SUM(COALESCE(b.final_amount, b.total_amount, 0)), 0) AS grand_total
+        COALESCE(SUM(COALESCE(b.final_amount, b.total_amount, 0)), 0) AS ticketing_total
       FROM bookings b
       WHERE b.booking_status <> 'Cancelled'
         AND b.payment_status = 'Completed'
-        AND b.parent_booking_id IS NULL
+        -- Include standalone attraction bookings AND combo children
+        AND (
+          (b.parent_booking_id IS NULL AND b.item_type = 'Attraction') OR
+          (b.parent_booking_id IS NOT NULL)
+        )
         AND b.booking_date ${dateCond}
         ${attractionFilter}
     ),
@@ -696,13 +702,24 @@ async function getOpsDashboardStats({ from, to, attraction_ids = null }) {
         AND b.payment_status = 'Completed'
         AND b.parent_booking_id IS NULL
         AND b.booking_date ${dateCond}
-        ${attractionFilter}
+        -- Add-ons are joined to parents. For scoped users, we check if the parent
+        -- attraction_id matches OR if the parent has child bookings matching the scope.
+        ${Array.isArray(attraction_ids) && attraction_ids.length > 0 ? `
+          AND (
+            b.attraction_id = ANY($${params.length}::bigint[])
+            OR EXISTS (
+              SELECT 1 FROM bookings b2 
+              WHERE b2.parent_booking_id = b.booking_id 
+              AND b2.attraction_id = ANY($${params.length}::bigint[])
+            )
+          )
+        ` : attractionFilter}
     )
     SELECT
-      bt.grand_total - at.addon_total AS total_ticketing,
+      tt.ticketing_total AS total_ticketing,
       at.addon_total AS total_addons,
-      bt.grand_total AS grand_total
-    FROM booking_totals bt, addon_totals at
+      (tt.ticketing_total + at.addon_total) AS grand_total
+    FROM ticketing_totals tt, addon_totals at
   `;
 
   // §3 ATTRACTION BREAKDOWN — Include combo child bookings per attraction
@@ -884,7 +901,8 @@ async function getTransactionReport({ from, to, type = 'both', attraction_ids = 
         0 AS discount,
         ba.quantity,
         (ba.price * ba.quantity) AS nett,
-        COALESCE(o.order_ref, b.booking_ref) AS order_ref
+        COALESCE(o.order_ref, b.booking_ref) AS order_ref,
+        b.parent_booking_id
       FROM booking_addons ba
       JOIN bookings b ON b.booking_id = ba.booking_id
       JOIN addons ad ON ad.addon_id = ba.addon_id
@@ -893,7 +911,16 @@ async function getTransactionReport({ from, to, type = 'both', attraction_ids = 
         AND b.payment_status = 'Completed'
         AND b.parent_booking_id IS NULL
         AND b.booking_date ${dateCond}
-        ${attractionFilter}
+        ${Array.isArray(attraction_ids) && attraction_ids.length > 0 ? `
+          AND (
+            b.attraction_id = ANY($${params.length}::bigint[])
+            OR EXISTS (
+              SELECT 1 FROM bookings b2 
+              WHERE b2.parent_booking_id = b.booking_id 
+              AND b2.attraction_id = ANY($${params.length}::bigint[])
+            )
+          )
+        ` : attractionFilter}
       ORDER BY b.created_at DESC
     `;
   } else if (type === 'ticketing') {
@@ -916,7 +943,8 @@ async function getTransactionReport({ from, to, type = 'both', attraction_ids = 
             WHEN b.parent_booking_id IS NOT NULL THEN b.total_amount
             ELSE COALESCE(b.final_amount, b.total_amount, 0) - CASE WHEN b.parent_booking_id IS NULL THEN COALESCE((SELECT SUM(ba2.price * ba2.quantity) FROM booking_addons ba2 WHERE ba2.booking_id = b.booking_id), 0) ELSE 0 END
         END AS nett,
-        COALESCE(o.order_ref, b.booking_ref) AS order_ref
+        COALESCE(o.order_ref, b.booking_ref) AS order_ref,
+        b.parent_booking_id
       FROM bookings b
       LEFT JOIN attractions a ON a.attraction_id = b.attraction_id
       LEFT JOIN combos c ON c.combo_id = b.combo_id
@@ -949,7 +977,8 @@ async function getTransactionReport({ from, to, type = 'both', attraction_ids = 
                   WHEN b.parent_booking_id IS NOT NULL THEN b.total_amount
                   ELSE COALESCE(b.final_amount, b.total_amount, 0) - CASE WHEN b.parent_booking_id IS NULL THEN COALESCE((SELECT SUM(ba2.price * ba2.quantity) FROM booking_addons ba2 WHERE ba2.booking_id = b.booking_id), 0) ELSE 0 END
               END AS nett,
-          COALESCE(o.order_ref, b.booking_ref) AS order_ref
+          COALESCE(o.order_ref, b.booking_ref) AS order_ref,
+          b.parent_booking_id
         FROM bookings b
         LEFT JOIN attractions a ON a.attraction_id = b.attraction_id
         LEFT JOIN combos c ON c.combo_id = b.combo_id
@@ -972,7 +1001,8 @@ async function getTransactionReport({ from, to, type = 'both', attraction_ids = 
           0 AS discount,
           ba.quantity,
           (ba.price * ba.quantity) AS nett,
-          COALESCE(o.order_ref, b.booking_ref) AS order_ref
+          COALESCE(o.order_ref, b.booking_ref) AS order_ref,
+          b.parent_booking_id
         FROM booking_addons ba
         JOIN bookings b ON b.booking_id = ba.booking_id
         JOIN addons ad ON ad.addon_id = ba.addon_id
@@ -981,7 +1011,16 @@ async function getTransactionReport({ from, to, type = 'both', attraction_ids = 
           AND b.payment_status = 'Completed'
           AND b.parent_booking_id IS NULL
           AND b.booking_date ${dateCond}
-          ${attractionFilter}
+          ${Array.isArray(attraction_ids) && attraction_ids.length > 0 ? `
+            AND (
+              b.attraction_id = ANY($${params.length}::bigint[])
+              OR EXISTS (
+                SELECT 1 FROM bookings b2 
+                WHERE b2.parent_booking_id = b.booking_id 
+                AND b2.attraction_id = ANY($${params.length}::bigint[])
+              )
+            )
+          ` : attractionFilter}
       )
       ORDER BY created_at DESC
     `;
@@ -1005,6 +1044,7 @@ async function getTransactionReport({ from, to, type = 'both', attraction_ids = 
       bookingDate: r.created_at,
       visitDate: r.booking_date,
       description: r.description,
+      isComboChild: !!r.parent_booking_id,
       itemType: r.item_type,
       unitPrice: Number(r.unit_price),
       discount: Number(r.discount),
@@ -1098,7 +1138,7 @@ async function getGuestReport({ from, to, attraction_ids = null }) {
       GROUP BY b.booking_date
     ),
     merged AS (
-      SELECT booking_date, title, SUM(guests) AS guests
+      SELECT booking_date, title, SUM(guests) AS guests, SUM(revenue) AS revenue
       FROM (SELECT * FROM child_guests UNION ALL SELECT * FROM standalone_guests) x
       GROUP BY booking_date, title
     ),
@@ -1106,7 +1146,7 @@ async function getGuestReport({ from, to, attraction_ids = null }) {
       SELECT DISTINCT b.booking_date FROM bookings b
       WHERE b.booking_status <> 'Cancelled' AND b.payment_status = 'Completed'
         AND b.booking_date ${dateCond}
-        ${attractionFilter}
+        ${attractionFilter.replace('b.', 'b.')} -- keeps consistency
     )
     SELECT
       d.booking_date,
@@ -1116,12 +1156,30 @@ async function getGuestReport({ from, to, attraction_ids = null }) {
       COALESCE(SUM(m.guests) FILTER (WHERE m.title ILIKE '%devil%'), 0) AS devil,
       COALESCE(ac.addon_orders, 0) AS fb,
       COALESCE(SUM(m.guests), 0) AS total,
-      COALESCE(dt.total_revenue, 0) AS amt
+      (COALESCE(SUM(m.revenue), 0) + COALESCE((
+        -- Scoped add-on revenue calculation
+        SELECT SUM(ba.price * ba.quantity)
+        FROM booking_addons ba
+        JOIN bookings b ON b.booking_id = ba.booking_id
+        WHERE b.booking_date = d.booking_date
+          AND b.booking_status <> 'Cancelled'
+          AND b.payment_status = 'Completed'
+          AND b.parent_booking_id IS NULL
+          ${Array.isArray(attraction_ids) && attraction_ids.length > 0 ? `
+            AND (
+              b.attraction_id = ANY($${params.length}::bigint[])
+              OR EXISTS (
+                SELECT 1 FROM bookings b2 
+                WHERE b2.parent_booking_id = b.booking_id 
+                AND b2.attraction_id = ANY($${params.length}::bigint[])
+              )
+            )
+          ` : attractionFilter}
+      ), 0)) AS amt
     FROM dates d
-    LEFT JOIN daily_totals dt ON dt.booking_date = d.booking_date
     LEFT JOIN merged m ON m.booking_date = d.booking_date
     LEFT JOIN addon_counts ac ON ac.booking_date = d.booking_date
-    GROUP BY d.booking_date, ac.addon_orders, dt.total_revenue
+    GROUP BY d.booking_date, ac.addon_orders
     ORDER BY d.booking_date DESC
   `;
 

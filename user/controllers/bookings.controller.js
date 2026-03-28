@@ -224,13 +224,22 @@ exports.initiatePayPhiPayment = async (req, res, next) => {
     // For optimization, we let service fail if order not found, but strictly we should check user_id.
     // Skipping explicit user check DB call here for speed, service will throw if order doesn't exist.
 
-    const { email, mobile, amount } = (req.body && typeof req.body === 'object') ? req.body : {};
+    const { email, mobile, amount, name } = (req.body && typeof req.body === 'object') ? req.body : {};
     if (!email || !mobile) return res.status(400).json({ error: 'email and mobile are required' });
 
+    let customerName = name;
+    if (!customerName) {
+      const usersModel = require('../../models/users.model');
+      const user = await usersModel.getUserById(userId);
+      customerName = user?.name || '';
+    }
+
+    console.log(`[DEBUG] PayPhi Initiation - Order=${id}, Name=${customerName}`);
     const out = await bookingService.initiatePayPhiPayment({
       bookingId: id, // Service param name is legacy, but we pass Order ID
       email,
       mobile,
+      name: customerName,
       amount // Optional: pass the amount from frontend for verification
     });
     res.json(out);
@@ -289,7 +298,7 @@ exports.initiatePhonePePayment = async (req, res, next) => {
       });
     }
 
-    const { email, mobile, amount } = (req.body && typeof req.body === 'object') ? req.body : {};
+    const { email, mobile, amount, name } = (req.body && typeof req.body === 'object') ? req.body : {};
     if (!email || !mobile) {
       return res.status(400).json({
         error: 'Missing required fields',
@@ -297,10 +306,19 @@ exports.initiatePhonePePayment = async (req, res, next) => {
       });
     }
 
+    let customerName = name;
+    if (!customerName) {
+      const usersModel = require('../../models/users.model');
+      const user = await usersModel.getUserById(userId);
+      customerName = user?.name || '';
+    }
+
+    console.log(`[DEBUG] PhonePe Initiation - Order=${id}, Name=${customerName}`);
     const out = await bookingService.initiatePhonePePayment({
       bookingId: id, // Service param name is legacy, but we pass Order ID
       email,
       mobile,
+      name: customerName,
       amount
     });
     res.json(out);

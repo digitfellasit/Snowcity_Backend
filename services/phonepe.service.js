@@ -15,12 +15,14 @@ class PhonePeService {
    * @param {string} params.customerMobileNo - Backwards compatibility field
    * @param {string} params.mobileNumber - Customer mobile
    * @param {string} params.merchantUserId - PhonePe user identifier
+   * @param {string} params.customerName - Customer name
    * @returns {Promise<Object>}
    */
-  async initiate({ merchantTxnNo, amount, customerMobileNo, mobileNumber, merchantUserId, customerEmailID }) {
+  async initiate({ merchantTxnNo, amount, customerMobileNo, mobileNumber, merchantUserId, customerEmailID, customerName = '' }) {
     const phone = mobileNumber || customerMobileNo;
 
-    logger.info('PhonePe Service: Initiating payment', { merchantTxnNo, amount, phone });
+    logger.info('PhonePe Service: Initiating payment', { merchantTxnNo, amount, phone, customerName });
+    console.log(`[DEBUG] PhonePe Service Initiate: txn=${merchantTxnNo}, name=${customerName}`);
 
     try {
       // config/phonepe.js handles OAuth and Paise conversion (Rupees * 100)
@@ -29,6 +31,7 @@ class PhonePeService {
         amount: amount, // Pass rupees, config converts to paise
         merchantUserId: merchantUserId || `USER_${Date.now()}`,
         mobileNumber: phone,
+        customerName,
       });
 
       return {

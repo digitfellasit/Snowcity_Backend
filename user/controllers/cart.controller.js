@@ -88,7 +88,13 @@ exports.initiatePayPhi = async (req, res, next) => {
       return res.status(400).json({ error: 'email and mobile are required for payment' });
     }
 
-    const out = await cartService.initiatePayPhi({ user_id: userId, session_id: null, email: paymentEmail, mobile: paymentMobile });
+    const out = await cartService.initiatePayPhi({
+      user_id: userId,
+      session_id: null,
+      email: paymentEmail,
+      mobile: paymentMobile,
+      name: user.name
+    });
     res.json(out);
   } catch (err) { next(err); }
 };
@@ -118,7 +124,13 @@ exports.initiatePhonePe = async (req, res, next) => {
       return res.status(400).json({ error: 'email and mobile are required for payment' });
     }
 
-    const out = await cartService.initiatePhonePe({ user_id: userId, session_id: null, email: paymentEmail, mobile: paymentMobile });
+    const out = await cartService.initiatePhonePe({
+      user_id: userId,
+      session_id: null,
+      email: paymentEmail,
+      mobile: paymentMobile,
+      name: user.name
+    });
     res.json(out);
   } catch (err) { next(err); }
 };

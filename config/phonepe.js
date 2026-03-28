@@ -146,6 +146,7 @@ async function initiatePayment({
   amount,
   merchantUserId,
   mobileNumber,
+  customerName = '',
   callbackUrl = CALLBACK_URL
 }) {
   // ── Validate config ──
@@ -178,7 +179,8 @@ async function initiatePayment({
     expireAfter: 1200,                  // 20 min
     metaInfo: {
       udf1: String(merchantUserId || 'GUEST'),
-      udf2: String(mobileNumber || '')
+      udf2: String(mobileNumber || ''),
+      udf3: String(customerName || '')
     },
     paymentFlow: {
       type: 'PG_CHECKOUT',

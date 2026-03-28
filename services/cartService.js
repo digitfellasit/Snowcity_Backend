@@ -332,7 +332,7 @@ async function removeItem({ user_id = null, session_id = null, cart_item_id }) {
 }
 
 // services/cartService.js (only this function)
-async function initiatePayPhi({ user_id = null, session_id = null, email, mobile }) {
+async function initiatePayPhi({ user_id = null, session_id = null, email, mobile, name = '' }) {
   const cart = await cartModel.getOpenCart({ user_id, session_id });
   if (!cart) {
     const err = new Error('Open cart not found');
@@ -365,6 +365,7 @@ async function initiatePayPhi({ user_id = null, session_id = null, email, mobile
     amount,
     customerEmailID: String(email).trim(),
     customerMobileNo: String(mobile).trim(),
+    customerName: String(name || '').trim(),
     addlParam1: String(cart.cart_id),
     addlParam2: 'SnowCityCart',
   });
@@ -381,7 +382,7 @@ async function initiatePayPhi({ user_id = null, session_id = null, email, mobile
   return { redirectUrl, tranCtx, response: raw };
 }
 
-async function initiatePhonePe({ user_id = null, session_id = null, email, mobile }) {
+async function initiatePhonePe({ user_id = null, session_id = null, email, mobile, name = '' }) {
   const cart = await cartModel.getOpenCart({ user_id, session_id });
   if (!cart) {
     const err = new Error('Open cart not found');
@@ -414,6 +415,7 @@ async function initiatePhonePe({ user_id = null, session_id = null, email, mobil
     amount,
     customerEmailID: String(email).trim(),
     customerMobileNo: String(mobile).trim(),
+    customerName: String(name || '').trim(),
     merchantUserId: `USER_${user_id || Date.now()}`
   });
 

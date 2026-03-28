@@ -867,7 +867,7 @@ const createBooking = createBookings;
 
 // -------- Payment & Status --------
 
-async function initiatePayPhiPayment({ bookingId, email, mobile, amount: frontendAmount }) {
+async function initiatePayPhiPayment({ bookingId, email, mobile, name = '', amount: frontendAmount }) {
   // bookingId here is the identifier from the URL (:id)
   const identifier = bookingId;
   const isNumeric = /^\d+$/.test(String(identifier));
@@ -916,6 +916,7 @@ async function initiatePayPhiPayment({ bookingId, email, mobile, amount: fronten
     amount,
     customerEmailID: email,
     customerMobileNo: mobile,
+    customerName: name,
     addlParam1: String(order.order_ref),
     addlParam2: 'GroupOrder'
   });
@@ -1078,7 +1079,7 @@ async function checkPayPhiStatus(orderIdOrRef) {
 
 // -------- PhonePe Payment --------
 
-async function initiatePhonePePayment({ bookingId, email, mobile, amount: frontendAmount }) {
+async function initiatePhonePePayment({ bookingId, email, mobile, name = '', amount: frontendAmount }) {
   const identifier = bookingId;
   const isNumeric = /^\d+$/.test(String(identifier));
 
@@ -1127,6 +1128,7 @@ async function initiatePhonePePayment({ bookingId, email, mobile, amount: fronte
       amount,
       customerEmailID: email,
       customerMobileNo: mobile,
+      customerName: name,
       merchantUserId: `USER_${order.user_id || Date.now()}`
     });
     redirectUrl = result.redirectUrl;
