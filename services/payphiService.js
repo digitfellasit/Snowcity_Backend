@@ -1,6 +1,6 @@
 const payphi = require('../config/payphi');
 
-async function initiate({ merchantTxnNo, amount, customerEmailID, customerMobileNo, customerName = '', addlParam1 = '', addlParam2 = '' }) {
+async function initiate({ merchantTxnNo, amount, customerEmailID, customerMobileNo, customerName = '', addlParam1 = '', addlParam2 = '', addlParam3 = '' }) {
   const data = await payphi.initiateSale({
     merchantTxnNo,
     amount: Number(amount).toFixed(2),
@@ -9,6 +9,7 @@ async function initiate({ merchantTxnNo, amount, customerEmailID, customerMobile
     customerName,
     addlParam1,
     addlParam2,
+    addlParam3,
   });
 
   const redirectURI = data.redirectURI || data.redirectUri || `${payphi.BASE}/api/v2/authRedirect`;

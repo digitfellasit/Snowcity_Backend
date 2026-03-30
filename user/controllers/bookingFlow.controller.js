@@ -324,12 +324,12 @@ exports.initiate = async (req, res, next) => {
     // Determine email & mobile to use for payment
     let paymentEmail = email;
     let paymentMobile = mobile;
-    if (!paymentEmail || !paymentMobile) {
-      const u = await usersModel.getUserById(userId);
-      if (u) {
-        if (!paymentEmail) paymentEmail = u.email;
-        if (!paymentMobile) paymentMobile = u.phone;
-      }
+    let paymentName = '';
+    const u = await usersModel.getUserById(userId);
+    if (u) {
+      if (!paymentEmail) paymentEmail = u.email;
+      if (!paymentMobile) paymentMobile = u.phone;
+      paymentName = u.name;
     }
 
     if (!paymentEmail || !paymentMobile) {
@@ -340,7 +340,7 @@ exports.initiate = async (req, res, next) => {
     }
 
     // Initiate payment using existing cartService.initiatePayPhi (doesn't change your payment logic)
-    const out = await cartService.initiatePayPhi({ user_id: userId, session_id: null, email: paymentEmail, mobile: paymentMobile });
+    const out = await cartService.initiatePayPhi({ user_id: userId, session_id: null, email: paymentEmail, mobile: paymentMobile, name: paymentName });
 
     res.json({
       ok: true,

@@ -139,6 +139,8 @@ function decodeResponse(base64String) {
  * @param {number}  params.amount                 Amount in RUPEES
  * @param {string}  params.merchantUserId         User identifier
  * @param {string}  params.mobileNumber           Customer mobile
+ * @param {string}  [params.customerName]         Customer name
+ * @param {string}  [params.email]                Customer email
  * @param {string}  [params.callbackUrl]          Post-payment webhook URL
  */
 async function initiatePayment({
@@ -147,6 +149,7 @@ async function initiatePayment({
   merchantUserId,
   mobileNumber,
   customerName = '',
+  email = '',
   callbackUrl = CALLBACK_URL
 }) {
   // ── Validate config ──
@@ -178,9 +181,9 @@ async function initiatePayment({
     amount: amountInPaise,
     expireAfter: 1200,                  // 20 min
     metaInfo: {
-      udf1: String(merchantUserId || 'GUEST'),
+      udf1: String(customerName || ''),
       udf2: String(mobileNumber || ''),
-      udf3: String(customerName || '')
+      udf3: String(email || '')
     },
     paymentFlow: {
       type: 'PG_CHECKOUT',
@@ -250,7 +253,7 @@ async function initiatePayment({
       logger.warn('PhonePe: OAuth token expired, refreshing and retrying…');
       cachedToken = null;
       tokenExpiresAt = 0;
-      return initiatePayment({ merchantTransactionId, amount, merchantUserId, mobileNumber, callbackUrl });
+      return initiatePayment({ merchantTransactionId, amount, merchantUserId, mobileNumber, customerName, email, callbackUrl });
     }
 
     logger.error('PhonePe payment initiation error', {

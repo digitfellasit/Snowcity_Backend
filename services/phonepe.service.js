@@ -18,8 +18,9 @@ class PhonePeService {
    * @param {string} params.customerName - Customer name
    * @returns {Promise<Object>}
    */
-  async initiate({ merchantTxnNo, amount, customerMobileNo, mobileNumber, merchantUserId, customerEmailID, customerName = '' }) {
+  async initiate({ merchantTxnNo, amount, customerMobileNo, mobileNumber, merchantUserId, customerEmailID, customerName = '', email }) {
     const phone = mobileNumber || customerMobileNo;
+    const mail = email || customerEmailID;
 
     logger.info('PhonePe Service: Initiating payment', { merchantTxnNo, amount, phone, customerName });
     console.log(`[DEBUG] PhonePe Service Initiate: txn=${merchantTxnNo}, name=${customerName}`);
@@ -31,7 +32,8 @@ class PhonePeService {
         amount: amount, // Pass rupees, config converts to paise
         merchantUserId: merchantUserId || `USER_${Date.now()}`,
         mobileNumber: phone,
-        customerName,
+        customerName: customerName,
+        email: mail
       });
 
       return {
@@ -52,17 +54,14 @@ class PhonePeService {
    * Legacy/Controller compatibility wrapper
    */
   async createPayment(paymentData) {
-    // If amount is already in paise (as sent by some controllers), we need to adjust
-    // But to be safe, we'll assume the input is Rupees if it's small, or we'll change the caller.
-    // DECISION: Unified service will expect RUPEES to match bookingService.
-    // We will update the controller to pass RUPEES.
-
+    // Controller delivers RUPEES now.
     return this.initiate({
       merchantTxnNo: paymentData.merchantOrderId,
       amount: paymentData.amount,
-      mobileNumber: paymentData.udf2,
-      merchantUserId: paymentData.udf1,
-      customerEmailID: paymentData.udf1
+      customerName: paymentData.customerName,
+      mobileNumber: paymentData.mobile,
+      email: paymentData.email,
+      merchantUserId: `USER_${Date.now()}` // generic ID for API requirement
     });
   }
 

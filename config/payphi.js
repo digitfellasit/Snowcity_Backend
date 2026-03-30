@@ -109,6 +109,7 @@ async function initiateSale({
   returnURL,
   addlParam1 = '',
   addlParam2 = '',
+  addlParam3 = '',
   // allow extra params if needed (included in hash if non-empty as per spec)
   ...rest
 }) {
@@ -134,6 +135,7 @@ async function initiateSale({
     customerMobileNo,
     addlParam1,
     addlParam2,
+    addlParam3,
     ...rest,
   };
 

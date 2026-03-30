@@ -149,8 +149,7 @@ exports.createOffer = async (req, res, next) => {
           }
         }
       }
-      const bad = payload.rules.find((r) => !r.applies_to_all && (!Number.isInteger(r.target_id) || r.target_id <= 0));
-      if (bad) return res.status(400).json({ error: 'Invalid rule: target selection is required unless applies_to_all is true' });
+      // Removed target_id validation for custom selection
     }
     const row = await offersModel.createOffer(payload);
     res.status(201).json(row);
@@ -186,8 +185,7 @@ exports.updateOffer = async (req, res, next) => {
           }
         }
       }
-      const bad = payload.rules.find((r) => !r.applies_to_all && (!Number.isInteger(r.target_id) || r.target_id <= 0));
-      if (bad) return res.status(400).json({ error: 'Invalid rule: target selection is required unless applies_to_all is true' });
+      // Removed target_id validation for custom selection
     }
     const row = await offersModel.updateOffer(id, payload);
     if (!row) return res.status(404).json({ error: 'Offer not found' });

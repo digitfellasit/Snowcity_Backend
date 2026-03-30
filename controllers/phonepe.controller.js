@@ -1,5 +1,6 @@
 const phonepeService = require('../services/phonepe.service');
 const bookingsModel = require('../models/bookings.model');
+const usersModel = require('../models/users.model');
 const bookingService = require('../services/bookingService');
 const { pool } = require('../config/db');
 
@@ -105,12 +106,18 @@ class PhonePeController {
         });
       }
 
+      // Fetch user name from users table
+      const user = await usersModel.getUserById(order.user_id);
+      const customerName = user ? user.name : 'GUEST';
+
       // Create payment request payload
+      // udf1: name, udf2: mobile, udf3: email (as requested by user)
       const paymentData = {
         merchantOrderId: orderId,
         amount: parseFloat(amount), // Pass Rupees; service/config converts to paise
-        udf1: email,
-        udf2: mobile,
+        customerName: customerName,
+        mobile: mobile,
+        email: email,
         redirectUrl: process.env.PHONEPE_CALLBACK_URL || '',
         message: `Payment for Order ${orderId}`,
         paymentModeConfig: {

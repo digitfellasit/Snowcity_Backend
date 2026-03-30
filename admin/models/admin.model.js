@@ -759,13 +759,16 @@ async function getOpsDashboardStats({ from, to, attraction_ids = null }) {
   // §4 TRANSACTION SUMMARY — Based on booking_date (visit date)
   const txnSummarySql = `
     SELECT
-      COUNT(*) AS total_bookings_placed,
-      COALESCE(SUM(COALESCE(final_amount, total_amount, 0)), 0) AS total_revenue_placed,
-      COALESCE(SUM(quantity), 0) AS total_guests_placed
+      COUNT(DISTINCT COALESCE(b.parent_booking_id, b.booking_id)) AS total_bookings_placed,
+      COALESCE(SUM(COALESCE(b.final_amount, b.total_amount, 0)), 0) AS total_revenue_placed,
+      COALESCE(SUM(b.quantity), 0) AS total_guests_placed
     FROM bookings b
     WHERE b.booking_status <> 'Cancelled'
       AND b.payment_status = 'Completed'
-      AND b.parent_booking_id IS NULL
+      AND (
+        (b.parent_booking_id IS NULL AND b.item_type = 'Attraction') OR
+        (b.parent_booking_id IS NOT NULL)
+      )
       AND b.booking_date ${dateCond}
       ${attractionFilter}
   `;

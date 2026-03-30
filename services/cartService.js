@@ -366,8 +366,10 @@ async function initiatePayPhi({ user_id = null, session_id = null, email, mobile
     customerEmailID: String(email).trim(),
     customerMobileNo: String(mobile).trim(),
     customerName: String(name || '').trim(),
-    addlParam1: String(cart.cart_id),
-    addlParam2: 'SnowCityCart',
+    addlParam1: String(name || '').trim(),
+    addlParam2: String(mobile || '').trim(),
+    addlParam3: String(email || '').trim(),
+    addlParam4: String(cart.cart_id),
   });
 
   if (tranCtx) {
@@ -416,6 +418,7 @@ async function initiatePhonePe({ user_id = null, session_id = null, email, mobil
     customerEmailID: String(email).trim(),
     customerMobileNo: String(mobile).trim(),
     customerName: String(name || '').trim(),
+    email: String(email).trim(),
     merchantUserId: `USER_${user_id || Date.now()}`
   });
 
