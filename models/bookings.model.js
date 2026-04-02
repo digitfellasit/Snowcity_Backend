@@ -312,6 +312,15 @@ async function createOrderWithItems(orderPayload, items = []) {
       const slot_id = isCombo ? null : (item.slot_id || null);
       const combo_slot_id = isCombo ? (item.combo_slot_id || null) : null;
 
+      // Hardcoded temporary fix: Disable same-day booking for combo 26
+      if (isCombo && String(combo_id) === '26') {
+        const today = new Date().toISOString().split('T')[0];
+        const bookingDate = new Date(item.booking_date).toISOString().split('T')[0];
+        if (bookingDate === today) {
+          throw new Error('Same-day booking is not allowed for the Snow Park + Eyelusion combo.');
+        }
+      }
+
       // Calculate item specific totals (simple logic, can be expanded)
       // Assuming the frontend/controller calculated the unit price * qty = total_amount for this line item
       const itemTotal = item.total_amount || 0;
@@ -402,6 +411,14 @@ async function createBooking(fields = {}, { client: extClient } = {}) {
 
   // If virtual slot ID is provided (format: attraction_id-date-hour), extract the time
   // BUT only if slot timing is not already provided from frontend
+  if (isCombo && String(combo_id) === '26') {
+    const today = new Date().toISOString().split('T')[0];
+    const bookingDate = new Date(fields.booking_date).toISOString().split('T')[0];
+    if (bookingDate === today) {
+      throw new Error('Same-day booking is not allowed for the Snow Park + Eyelusion combo.');
+    }
+  }
+
   if (slot_id && typeof slot_id === 'string' && slot_id.includes('-')) {
     console.log('🔍 DEBUG parsing attraction virtual slot ID:', slot_id);
     const parts = slot_id.split('-');
