@@ -408,7 +408,7 @@ router.get('/sitemap-blogs.xml', async (req, res, next) => {
         const clientBase = getClientUrl();
 
         const { rows: blogs } = await pool.query(
-            `SELECT slug, title, image_url, image_alt, author, created_at, updated_at
+            `SELECT slug, title, featured_image, image_alt, author, created_at, updated_at
              FROM blogs
              WHERE active = TRUE
              ORDER BY COALESCE(created_at, NOW()) DESC`
@@ -420,7 +420,7 @@ router.get('/sitemap-blogs.xml', async (req, res, next) => {
             if (!blog.slug) continue;
             // Use updated_at if available (re-crawl trigger), else published date
             const lastmod  = fmtDate(blog.updated_at || blog.created_at);
-            const imageUrl = buildImageUrl(blog.image_url);
+            const imageUrl = buildImageUrl(blog.featured_image);
             const label    = blog.title || '';
             const altText  = blog.image_alt || label;
 
@@ -585,7 +585,7 @@ router.get('/:slug', async (req, res, next) => {
                 description: blog.meta_description || '',
                 keywords: blog.meta_keywords || '',
                 canonical: clientUrl,
-                image: blog.image_url || '',
+                image: blog.featured_image || blog.image_url || '',
                 imageAlt: blog.image_alt || '',
                 content: blog.editor_mode === 'raw' ? (blog.raw_html || '') : (blog.content || ''),
                 faq_items: blog.faq_items,
