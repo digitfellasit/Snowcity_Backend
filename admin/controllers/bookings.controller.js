@@ -76,7 +76,7 @@ exports.listBookings = async function listBookings(req, res, next) {
     }
 
     const p = Math.max(parseInt(page, 10) || 1, 1);
-    const l = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+    const l = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 10000);
     const off = (p - 1) * l;
 
     const where = [];

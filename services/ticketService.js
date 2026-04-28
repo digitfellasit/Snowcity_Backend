@@ -339,8 +339,14 @@ async function drawConsolidatedTicket(doc, data) {
     let nextY = infoY + 32;
 
     // ── Line-item price ─────────────────────────────────────────────
-    const itemTotal = Number(item.final_amount || item.total_amount || 0);
-    const unitPrice = qty > 0 ? Math.round(itemTotal / qty) : itemTotal;
+    // Subtract add-on costs so TICKET PRICE shows only attraction/combo × qty
+    const addonTotal = hasAddons
+      ? item.addons.reduce((sum, a) => sum + Number(a.price || 0) * Number(a.quantity || 1), 0)
+      : 0;
+    const itemTotal   = Number(item.final_amount || item.total_amount || 0);
+    const baseTotal   = Math.max(itemTotal - addonTotal, 0);   // pure attraction/combo cost
+    const unitPrice   = qty > 0 ? Math.round(baseTotal / qty) : baseTotal;
+
     doc.font('Helvetica-Bold').fontSize(7).fillColor(C.veryLight)
       .text('TICKET PRICE', cx, nextY);
     nextY += 11;
